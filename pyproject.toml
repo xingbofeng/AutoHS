@@ -1,0 +1,37 @@
+[project]
+name = "autohs"
+version = "0.1.0"
+description = "Local Mac port of Yiyuan-Dong/AutoHS"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = "MIT"
+dependencies = [
+    "loguru",
+    "requests",
+    "numpy",
+    "opencv-python",
+    "scikit-image",
+    "pillow",
+    "mss",
+    "pyautogui",
+    "psutil; sys_platform == 'darwin'",
+    "pyobjc-core; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+windows = [
+    "pywin32; sys_platform == 'win32'",
+    "keyboard; sys_platform == 'win32'",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"

@@ -1,6 +1,12 @@
 .idea/
 __pycache__/
 venv/
+.venv/
+build/
+dist/
+wheels/
+*.egg-info
+!uv.lock
 img/
 backup.md
 test*

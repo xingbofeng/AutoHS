@@ -4,6 +4,7 @@ from tkinter import messagebox
 from constants.pixel_coordinate import *
 from config import *
 from utils.window_utils import test_hs_available, test_battlenet_available, check_power_config, check_loading_screen_config
+from utils.install_path import HEARTHSTONE_ROOT, darwin_install_status
 from utils.json_op import JSON_LAST_MODIFIED_TIME
 
 ABNORMAL_WIDTH_HEIGHT_LIST = [(1707, 960), (2048, 1152), (1306, 720), (1536, 864)]
@@ -18,20 +19,11 @@ def is_integer(s):
         return None
 
 def check_hearthstone_path(path):
-    if PLATFORM == "Darwin":  # macOS
-        # 在macOS上，炉石传说是一个应用程序包（.app）
-        path = '/Applications/Hearthstone/Hearthstone.app'
-        if not path.endswith(".app") and not os.path.exists(path):
-            app_path = path if path.endswith(".app") else os.path.join(path, "Hearthstone.app")
-            messagebox.showinfo("Warning", f"未找到炉石传说应用程序包: {app_path}")
+    if PLATFORM == "Darwin":
+        ok, message = darwin_install_status(path or HEARTHSTONE_ROOT)
+        if not ok:
+            messagebox.showinfo("Warning", message)
             return False
-
-        # 检查Logs文件夹路径
-        logs_path = os.path.join(os.path.expanduser("/Applications/Hearthstone/Logs"))
-        if not os.path.exists(logs_path):
-            messagebox.showinfo("Warning", f"未找到炉石传说日志文件夹: {logs_path}")
-            return False
-
         return True
     else:  # Windows 或其他平台
         if not os.path.exists(path):

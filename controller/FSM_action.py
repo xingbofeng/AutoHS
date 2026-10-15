@@ -5,8 +5,9 @@ from controller import controller
 from strategy.strategy import StrategyState
 from utils.log_state import *
 from loguru import logger
-from config import PLATFORM
+from config import PLATFORM, autohs_config
 from constants.state_and_key import *
+from utils.install_path import darwin_install_root, hearthstone_log_dir
 
 FSM_state = ""
 time_begin = 0.0
@@ -22,10 +23,10 @@ last_state_in_log = SCREEN_MODE_STARTUP
 
 def init():
     global log_state, log_iter, log_iter_loading_screen, choose_hero_count, autohs_config
+    root = autohs_config.hearthstone_install_path
     if PLATFORM == "Darwin":
-        log_path = "/Applications/Hearthstone/Logs"
-    else:
-        log_path = os.path.join(autohs_config.hearthstone_install_path , "Logs")
+        root = darwin_install_root(root)
+    log_path = hearthstone_log_dir(root)
 
     logger.debug("初始化日志状态")
     log_state = LogState()

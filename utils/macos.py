@@ -3,21 +3,15 @@ import AppKit
 import Quartz
 import CoreFoundation
 
+from utils.install_path import matching_app_paths
+
 
 def get_installed_application(app_name):
-    # 获取 /Applications 目录下的所有应用程序
-    applications_dir = "/Applications"
-    all_app, _ = AppKit.NSFileManager.defaultManager().contentsOfDirectoryAtPath_error_(applications_dir, None)
-    for app_path in all_app:
-        full_path = f"{applications_dir}/{app_path}"
-        if full_path.endswith('.app'):
-            bundle = AppKit.NSBundle.bundleWithPath_(full_path)
-            if not bundle:
-                continue
-            bundle_id = bundle.infoDictionary().get('CFBundleName', '')
-            if bundle_id == app_name:
-                return bundle
-
+    for full_path in matching_app_paths(app_name):
+        bundle = AppKit.NSBundle.bundleWithPath_(full_path)
+        if not bundle:
+            continue
+        return bundle
     return None
 
 

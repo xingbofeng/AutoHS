@@ -2,6 +2,7 @@ import json
 import platform
 from utils.autohs_logger import *
 from constants.pixel_coordinate import COORDINATES_1920_1080, COORDINATES_2560_1440, get_screen_resolution
+from utils.install_path import HEARTHSTONE_ROOT
 # 每个回合开始发个表情的概率
 EMOJ_RATIO = 0.05
 
@@ -34,7 +35,7 @@ class AutoHSConfig:
         self.height = 0
         self.max_play_time = 0
         self.max_win_count = 0
-        self.hearthstone_install_path = ""
+        self.hearthstone_install_path = HEARTHSTONE_ROOT if PLATFORM == "Darwin" else ""
         self.user_name = ""
         self.give_up_with_dignity = False
         self.click_coordinates = None
