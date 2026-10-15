@@ -10,9 +10,8 @@ __Description__ = ""
 
 from constants.state_and_key import *
 from controller.base.mouse import MouseController
-from config import autohs_config
+from config import live_click_coordinates as coors
 
-coors = autohs_config.click_coordinates
 
 class CardsController(MouseController):
     def chooseHandCard(self, card_index, card_num, click=True):

@@ -205,12 +205,7 @@ if __name__ == "__main__":
         logger_init("DEBUG")
 
     autohs_config.exit_func = close_gui
-    # if autohs_config.width == 0:
-    #     autohs_config.width = WIDTH
-    # if autohs_config.height == 0:
-    #     autohs_config.height = HEIGHT
-    autohs_config.width = WIDTH
-    autohs_config.height = HEIGHT
+    WIDTH, HEIGHT = bind_screen(*screen_size())
 
     next_text_row = 0
 

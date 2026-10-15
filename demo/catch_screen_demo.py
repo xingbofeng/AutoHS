@@ -119,7 +119,8 @@ if __name__ == "__main__":
 
     print("Current state: {}".format(window_utils.get_state()))
 
-    add_line(im_opencv, WIDTH, HEIGHT)
+    width, height = screen_size()
+    add_line(im_opencv, width, height)
     add_point(im_opencv, POINT_LIST)
 
     cv2.imshow("Full Screen", im_opencv)  # 显示

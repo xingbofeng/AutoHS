@@ -1,7 +1,7 @@
 import json
 import platform
 from utils.autohs_logger import *
-from constants.pixel_coordinate import COORDINATES_1920_1080, COORDINATES_2560_1440, get_screen_resolution
+from constants.pixel_coordinate import COORDINATES_1920_1080, COORDINATES_2560_1440
 from utils.install_path import HEARTHSTONE_ROOT
 # 每个回合开始发个表情的概率
 EMOJ_RATIO = 0.05
@@ -76,8 +76,25 @@ class AutoHSConfig:
 
 autohs_config = AutoHSConfig()
 
-WIDTH, HEIGHT = get_screen_resolution()
-if WIDTH == 1920 and HEIGHT == 1080:
-    autohs_config.click_coordinates = COORDINATES_1920_1080
-elif WIDTH == 2560 and HEIGHT == 1440:
-    autohs_config.click_coordinates = COORDINATES_2560_1440
+
+def bind_screen(width, height):
+    autohs_config.width = width
+    autohs_config.height = height
+    if width == 1920 and height == 1080:
+        autohs_config.click_coordinates = COORDINATES_1920_1080
+    elif width == 2560 and height == 1440:
+        autohs_config.click_coordinates = COORDINATES_2560_1440
+    else:
+        autohs_config.click_coordinates = None
+    return width, height
+
+
+class LiveClickCoordinates:
+    def __getitem__(self, key):
+        table = autohs_config.click_coordinates
+        if table is None:
+            raise RuntimeError("尚未绑定点击坐标")
+        return table[key]
+
+
+live_click_coordinates = LiveClickCoordinates()

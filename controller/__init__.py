@@ -8,15 +8,15 @@ __Created__ = "2024/10/11"
 __Description__ = ""
 """
 
-from controller.base.cards import CardsController
-from controller.base.game import GameController
-from controller.base.hero import HeroController
-from controller.base.minion import MinionController
-from controller.base.attack import AttackController
 from enum import Enum
 
 class Controller:
     def __init__(self) -> None:
+        from controller.base.cards import CardsController
+        from controller.base.game import GameController
+        from controller.base.hero import HeroController
+        from controller.base.minion import MinionController
+        from controller.base.attack import AttackController
         self.cards = CardsController()
         self.game = GameController()
         self.hero = HeroController()
@@ -44,4 +44,19 @@ class PositionIndex:
     def is_my_minion(self):
         return self.position_type == PositionIndexType.MY_MINION
 
-controller = Controller()
+_controller = None
+
+
+def get_controller():
+    global _controller
+    if _controller is None:
+        _controller = Controller()
+    return _controller
+
+
+class _LazyController:
+    def __getattr__(self, name):
+        return getattr(get_controller(), name)
+
+
+controller = _LazyController()

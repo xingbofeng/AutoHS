@@ -40,9 +40,8 @@ def logger_init(level="INFO"):
 
     _logger_initialized = True
 
-logger_init()
-
 if __name__ == "__main__":
+    logger_init()
 
     # 记录不同级别的日志消息
     logger.debug("这是一条调试消息") # 不会被记录

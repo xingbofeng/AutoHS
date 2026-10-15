@@ -1,8 +1,7 @@
-from config import autohs_config
+from config import live_click_coordinates as coors
 from constants.state_and_key import *
 from controller.base.mouse import MouseController
 
-coors = autohs_config.click_coordinates
 
 class MinionController(MouseController):
     def getMyMinionPosition(self, mine_index, mine_num):

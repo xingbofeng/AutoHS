@@ -162,8 +162,7 @@ def max_diff(img, pixel_list):
 # but I found it does not work well now. So now it just take the
 # snapshot of the frontend window.
 def take_snapshot():
-    width = WIDTH
-    height = HEIGHT
+    width, height = screen_size()
     if USE_PYOBJC:
         with mss.mss() as sct:
             monitor = sct.monitors[1]  # 通常 monitors[1] 是主屏幕
@@ -252,7 +251,8 @@ def get_state():
     if im_opencv.shape[2] == 4:
         im_opencv = cv2.cvtColor(im_opencv, cv2.COLOR_BGRA2BGR)
 
-    if WIDTH == 2560:
+    width, _height = screen_size()
+    if width == 2560:
         curr_main_menu_part = im_opencv[300:900,980:1580]
         curr_choose_hero_part = im_opencv[1040:1340, 1710:2010]
         curr_matching_part = im_opencv[400:1000, 980:1580]
@@ -264,7 +264,7 @@ def get_state():
         simm_choose_card = ssim(curr_choose_card_part, choose_card_img_2k, multichannel=True, channel_axis = 2)
 
         logger.debug(f"Similarity: main_menu: {simm_main_menu}, choose_hero: {simm_choose_hero}, matching: {simm_matching}, choose_card: {simm_choose_card}")
-    elif WIDTH == 1920:
+    elif width == 1920:
         curr_main_menu_part = im_opencv[300:600, 810:1110]
         curr_choose_hero_part = im_opencv[800:980, 1310:1490]
         curr_matching_part = im_opencv[300:700, 770:1170]

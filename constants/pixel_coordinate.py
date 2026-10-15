@@ -1,15 +1,21 @@
-import tkinter as tk
 from constants.state_and_key import *
 
 def get_screen_resolution():
+    import tkinter as tk
     root = tk.Tk()
-    root.withdraw()  # 隐藏主窗口
-    width = root.winfo_screenwidth()
-    height = root.winfo_screenheight()
-    return width, height
+    root.withdraw()
+    try:
+        return root.winfo_screenwidth(), root.winfo_screenheight()
+    finally:
+        root.destroy()
 
-# Initialize width and height when the module is imported
-WIDTH, HEIGHT = get_screen_resolution()
+_screen_size = None
+
+def screen_size():
+    global _screen_size
+    if _screen_size is None:
+        _screen_size = get_screen_resolution()
+    return _screen_size
 
 # Coordinates for 1920x1080 resolution
 hand_x_1920_1080 = [
@@ -139,4 +145,5 @@ assert len(COORDINATES_2560_1440) == len(COORDINATES_1920_1080), "The sizes of t
 
 
 if __name__ == "__main__":
-    print(f"Screen resolution: {WIDTH}x{HEIGHT}")
+    width, height = screen_size()
+    print(f"Screen resolution: {width}x{height}")
