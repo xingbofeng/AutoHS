@@ -9,11 +9,21 @@ import os
 from skimage.metrics import structural_similarity as ssim
 
 # Add the parent directory to sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from utils import window_utils
-from constants.pixel_coordinate import *
-from utils.autohs_logger import *
+import autohs.desktop.capture as capture
+import autohs.desktop.window_service as window_service
+import autohs.vision.recognition as recognition
+from autohs.desktop.screen import screen_size
+from autohs.infrastructure.logging import logger, logger_init
+
+
+class window_utils:
+    test_hs_available = staticmethod(window_service.test_hs_available)
+    move_window_foreground = staticmethod(window_service.move_window_foreground)
+    get_HS_hwnd = staticmethod(window_service.get_HS_hwnd)
+    take_snapshot = staticmethod(capture.take_snapshot)
+    get_state = staticmethod(recognition.get_state)
 
 
 PRINT_ALL_AREA_LIST = []

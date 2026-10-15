@@ -13,7 +13,7 @@ test*
 *.json
 *.log
 *.txt
-!requirements.txt
 *.png
 !figs/*.png
+!src/autohs/assets/templates/*.png
 *.jpg

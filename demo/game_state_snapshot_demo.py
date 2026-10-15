@@ -1,13 +1,15 @@
 # Add the parent directory to sys.path
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from strategy.strategy import *
-from utils.autohs_logger import *
-from utils.log_op import log_iter_func, parse_line
-from utils.log_state import update_state
-from config import autohs_config
+from autohs.config import autohs_config
+from autohs.constants import LOG_CONTAINER_ERROR
+from autohs.infrastructure.logging import logger, logger_init
+from autohs.logs.power import parse_line
+from autohs.logs.reader import log_iter_func
+from autohs.logs.state import LogState, update_state
+from autohs.strategy.state import StrategyState
 
 HEARTHSTONE_POWER_LOG_PATH = "D:/HearthStone/Logs"
 PLAYER_NAME = "江海寄余生"     # !!!请根据实际情况修改!!!

@@ -25,14 +25,21 @@
 
 ### 如何运行
 
-0. 安装`Python3`。
+0. 安装 Python 3.13 和 [uv](https://docs.astral.sh/uv/)。依赖由 `pyproject.toml` 与 `uv.lock` 锁定，仓库里没有 `requirements.txt`。
 
-1. 安装所需依赖:
+1. 在项目目录安装锁定依赖：
 ```
-pip install -r requirements.txt
+uv sync
 ```
 
-2. 启动命令行并在项目目录下运行`python main.py`。运行正常的话应该能看到如下图所示的GUI界面：
+2. 启动：
+```
+uv run python main.py
+```
+
+类关系和每个类的职责在 `ARCHITECTURE.md`。`figs/arch.png` 是上游的日志数据流图。
+
+运行正常的话应该能看到如下图所示的GUI界面：
 
 ![GUI](./figs/gui.png)
 
