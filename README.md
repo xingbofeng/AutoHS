@@ -1,5 +1,7 @@
 # AutoHS
 
+后续开发在 [learnerLj/AutoHS](https://github.com/learnerLj/AutoHS)。上游是 [Yiyuan-Dong/AutoHS](https://github.com/Yiyuan-Dong/AutoHS)，许可仍是 MIT。
+
 **目前已经恢复了对狂野模式暗牧的支持，不过整体胜率并不是很乐观，只能说未来可期。**
 
 本项目适用于以下目标：
