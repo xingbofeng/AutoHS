@@ -181,6 +181,8 @@ classDiagram
 | `generate_strategy_entity` | 按 `CARDTYPE` 构造 `StrategyMinion`、`StrategyWeapon`、`StrategyHero`、`StrategySpell` 或 `StrategyHeroPower` |
 | `clicks` | 返回懒加载的 `controller` |
 | `bind_screen` | 只在 1920×1080 和 2560×1440 时绑定坐标表，其他分辨率把表设为 `None` |
+| `scale_from_1920` | 按窗口高度除以 1080 缩放 1920 坐标表，把 16:9 画面中心放到窗口中心。随从间距只乘比例 |
+| `bind_window` | 用炉石窗口矩形调用 `scale_from_1920`。Darwin 上按下开始时，有窗口就覆盖屏幕分辨率表 |
 | `get_state` | 用八张模板图判断当前界面 |
 | `images` | 第一次调用时读取八张模板 PNG |
 | `AutoHS_automata` | 按界面状态调用选英雄、匹配、留牌、战斗、结算和错误处理 |

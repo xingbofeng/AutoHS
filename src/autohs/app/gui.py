@@ -156,6 +156,16 @@ def check_before_start():
         messagebox.showinfo("Warning", "未找到炉石传说或战网，请至少打开一个")
         return False
 
+    if PLATFORM == "Darwin":
+        from autohs.desktop.macos import get_window_rect
+        from autohs.desktop.window_service import get_HS_hwnd
+
+        hwnd = get_HS_hwnd()
+        if hwnd:
+            rect = get_window_rect(hwnd)
+            if rect:
+                bind_window(*rect)
+
     if autohs_config.click_coordinates is None:
         messagebox.showinfo("Warning", "未找到对应分辨率的点击坐标")
         return False

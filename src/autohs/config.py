@@ -1,7 +1,11 @@
 import json
 import platform
 from autohs.infrastructure.logging import logger
-from autohs.desktop.coordinates import COORDINATES_1920_1080, COORDINATES_2560_1440
+from autohs.desktop.coordinates import (
+    COORDINATES_1920_1080,
+    COORDINATES_2560_1440,
+    scale_from_1920,
+)
 from autohs.paths.install import HEARTHSTONE_ROOT
 # 每个回合开始发个表情的概率
 EMOJ_RATIO = 0.05
@@ -87,6 +91,16 @@ def bind_screen(width, height):
     else:
         autohs_config.click_coordinates = None
     return width, height
+
+
+def bind_window(left, top, right, bottom):
+    width = right - left
+    height = bottom - top
+    if width <= 0 or height <= 0:
+        autohs_config.click_coordinates = None
+        return None
+    autohs_config.click_coordinates = scale_from_1920(left, top, width, height)
+    return autohs_config.click_coordinates
 
 
 class LiveClickCoordinates:

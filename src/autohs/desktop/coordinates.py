@@ -126,3 +126,86 @@ COORDINATES_2560_1440 = {
 
 assert len(COORDINATES_2560_1440) == len(COORDINATES_1920_1080), "The sizes of the COORDINATES dictionaries do not match"
 
+_X_KEYS = {
+    COORDINATE_MID_X,
+    COORDINATE_CANCEL_X,
+    COORDINATE_MY_HAND_X,
+    COORDINATE_START_CARD_X,
+    COORDINATE_SETTING_X,
+    COORDINATE_MATCH_OPPONENT_X,
+    COORDINATE_END_TURN_X,
+    COORDINATE_ERROR_REPORT_X,
+    COORDINATE_DISCONNECTED_X,
+    COORDINATE_SKILL_X,
+    COORDINATE_BATTLEFILED_RANGE_X,
+    COORDINATE_GIVE_UP_X,
+}
+_Y_KEYS = {
+    COORDINATE_MID_Y,
+    COORDINATE_MY_MINION_Y,
+    COORDINATE_OPPO_MINION_Y,
+    COORDINATE_MY_HERO_Y,
+    COORDINATE_OPPO_HERO_Y,
+    COORDINATE_CANCEL_Y,
+    COORDINATE_MY_HAND_Y,
+    COORDINATE_START_CARD_Y,
+    COORDINATE_NO_OP_Y,
+    COORDINATE_MAIN_MENU_NO_OP_Y,
+    COORDINATE_SETTING_Y,
+    COORDINATE_MATCH_OPPONENT_Y,
+    COORDINATE_ENTER_BATTLE_Y,
+    COORDINATE_COMMIT_CHOOSE_START_CARD_Y,
+    COORDINATE_END_TURN_Y,
+    COORDINATE_ERROR_REPORT_Y,
+    COORDINATE_DISCONNECTED_Y,
+    COORDINATE_SKILL_Y,
+    COORDINATE_BATTLEFILED_RANGE_Y,
+    COORDINATE_GIVE_UP_Y,
+}
+_DELTA_KEYS = {COORDINATE_HALF_MINION_GAP_X}
+_PAIR_KEYS = {COORDINATE_EMOJ_LIST}
+
+
+def _scaled_axis(value, origin, rate):
+    if isinstance(value, dict):
+        return {key: _scaled_axis(item, origin, rate) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_scaled_axis(item, origin, rate) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_scaled_axis(item, origin, rate) for item in value)
+    return int(origin + value * rate)
+
+
+def scale_from_1920(left, top, width, height):
+    """Place the 1920x1080 table on a window.
+
+    The scale is the window height divided by 1080. A 16:9 board of that
+    height is centered on the window. Spacing such as the minion gap is
+    scaled and not shifted.
+    """
+    if width <= 0 or height <= 0:
+        raise ValueError("window size must be positive")
+    rate = height / 1080
+    origin_x = left + width / 2 - (1920 * rate) / 2
+    origin_y = top + height / 2 - height / 2
+    scaled = {}
+    for key, value in COORDINATES_1920_1080.items():
+        if key in _DELTA_KEYS:
+            scaled[key] = int(value * rate)
+        elif key in _X_KEYS:
+            scaled[key] = _scaled_axis(value, origin_x, rate)
+        elif key in _Y_KEYS:
+            scaled[key] = _scaled_axis(value, origin_y, rate)
+        elif key in _PAIR_KEYS:
+            scaled[key] = [
+                (int(origin_x + x * rate), int(origin_y + y * rate))
+                for x, y in value
+            ]
+        else:
+            raise KeyError(key)
+    return scaled
+
+
+def point_inside(x, y, left, top, right, bottom):
+    return left <= x <= right and top <= y <= bottom
+
