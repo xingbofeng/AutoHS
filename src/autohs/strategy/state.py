@@ -271,15 +271,21 @@ class StrategyState:
         ret = []
 
         for oppo_minion in self.oppo_minions:
-            if oppo_minion.taunt and oppo_minion.can_be_pointed_by_minion:
+            if oppo_minion.taunt and oppo_minion.can_be_pointed_by_minion \
+                    and not self._skip_optional_attack_target(oppo_minion):
                 ret.append(oppo_minion)
 
         if len(ret) == 0:
             for oppo_minion in self.oppo_minions:
-                if oppo_minion.can_be_pointed_by_minion:
+                if oppo_minion.can_be_pointed_by_minion \
+                        and not self._skip_optional_attack_target(oppo_minion):
                     ret.append(oppo_minion)
 
         return ret
+
+    @staticmethod
+    def _skip_optional_attack_target(minion):
+        return getattr(minion, "is_harmless_zero_attack_deathrattle", False)
 
     @property
     def oppo_has_taunt(self):

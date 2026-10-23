@@ -1,7 +1,6 @@
 """Behaviors for the Demon Hunter cards in the current deck."""
 
 import copy
-import time
 
 from autohs.behaviors.basic import (
     HeroPowerCard,
@@ -85,7 +84,7 @@ class DemonHunterHeroPower(HeroPowerCard):
     @classmethod
     def use_with_arg(cls, state, card_index, *args):
         clicks().hero.useSkill()
-        time.sleep(1)
+        cls.finish_action()
 
 
 class DemonClaws(DemonHunterHeroPower):
@@ -182,6 +181,10 @@ class IgneousHeart(SpellNoPoint):
             for index, minion in enumerate(minions):
                 if not minion.can_be_pointed_by_spell or getattr(minion, "immune", False):
                     continue
+                if side == "enemy" and getattr(
+                    minion, "is_harmless_zero_attack_deathrattle", False,
+                ):
+                    continue
                 survives = getattr(minion, "divine_shield", False) or minion.health > damage
                 attack_value = hero_attack_value(state, 3) if survives else 0
                 if side == "mine" and attack_value <= 0:
@@ -233,7 +236,7 @@ class IgneousHeart(SpellNoPoint):
         else:
             clicks().minion.chooseEnemyMinion(target_index, state.oppo_minion_num)
         clicks().game.cancelClick()
-        time.sleep(cls.wait_time)
+        cls.finish_action()
 
 
 class RushSpell(SpellNoPoint):
@@ -280,7 +283,7 @@ class RushSpell(SpellNoPoint):
         clicks().cards.chooseHandCard(card_index, state.my_hand_card_num)
         clicks().minion.chooseMyMinion(args[0], state.my_minion_num)
         clicks().game.cancelClick()
-        time.sleep(cls.wait_time)
+        cls.finish_action()
 
 
 class IllidariStudies(SpellNoPoint):

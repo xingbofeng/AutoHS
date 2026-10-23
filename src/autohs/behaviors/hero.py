@@ -18,7 +18,7 @@ class TotemicCall(HeroPowerCard):
     def use_with_arg(cls, state, card_index, *args):
         clicks().hero.useSkill()
         # click.use_skill_no_point()
-        time.sleep(1)
+        cls.finish_action()
 
 
 class LesserHeal(HeroPowerCard):
@@ -40,7 +40,7 @@ class LesserHeal(HeroPowerCard):
     @classmethod
     def use_with_arg(cls, state, card_index, *args):
         clicks().attack.useSkillToTarget(args[0], state.my_minion_num, SkillType.POINT_TO_NONE)
-        time.sleep(1)
+        cls.finish_action()
 
 
 class BallistaShot(HeroPowerCard):
@@ -52,7 +52,7 @@ class BallistaShot(HeroPowerCard):
     def use_with_arg(cls, state, card_index, *args):
         clicks().hero.useSkill()
         # click.use_skill_no_point()
-        time.sleep(1)
+        cls.finish_action()
 
 
 class MindSpike(HeroPowerCard):
@@ -86,4 +86,4 @@ class MindSpike(HeroPowerCard):
     @classmethod
     def use_with_arg(cls, state, card_index, *args):
         clicks().attack.useSkillToTarget(args[0], state.oppo_minion_num, SkillType.POINT_TO_OPPONENT)
-        time.sleep(1)
+        cls.finish_action()

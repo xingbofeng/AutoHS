@@ -25,6 +25,11 @@ class Card(ABC):
     # 一些功能卡不能用一个简单的数值去评判价值, 应针对其另写
     # 函数
     value = 0
+    wait_time = autohs_config.post_action_settle_time
+
+    @classmethod
+    def finish_action(cls):
+        time.sleep(cls.wait_time)
 
     # 返回两个东西,第一项是使用这张卡的\delta h,
     # 之后是是用这张卡的最佳参数,参数数目不定
@@ -57,7 +62,7 @@ class SpellNoPoint(SpellCard):
     @classmethod
     def use_with_arg(cls, state, card_index, *args):
         clicks().cards.selectAndUseHandCard(card_index, state.my_hand_card_num)
-        time.sleep(cls.wait_time)
+        cls.finish_action()
 
 
 class SpellPointOppo(SpellCard):
@@ -75,7 +80,7 @@ class SpellPointOppo(SpellCard):
         else:
             clicks().hero.chooseEnemyHero()
         clicks().game.cancelClick()
-        time.sleep(cls.wait_time)
+        cls.finish_action()
 
 
 class SpellPointMine(SpellCard):
@@ -91,12 +96,13 @@ class SpellPointMine(SpellCard):
         clicks().minion.chooseMyMinion(mine_index, state.my_minion_num)
         clicks().game.cancelClick()
 
-        time.sleep(cls.wait_time)
+        cls.finish_action()
 
 
 class MinionCard(Card):
     # 有的随从带有光环，其价值不仅仅由身材决定，所以加上一个偏移量
     live_value = 0
+    wait_time = autohs_config.basic_minion_put_interval
 
     @classmethod
     def get_card_type(cls):
@@ -167,7 +173,7 @@ class MinionNoPoint(MinionCard):
         gap_index = args[0]
         clicks().cards.putMinionOnBattleGround(card_index, state.my_hand_card_num, gap_index, state.my_minion_num)
         clicks().game.cancelClick()
-        time.sleep(autohs_config.basic_minion_put_interval)
+        cls.finish_action()
 
 
 class MinionPointOppo(MinionCard):
@@ -185,7 +191,7 @@ class MinionPointOppo(MinionCard):
         else:
             clicks().hero.chooseEnemyHero()
         clicks().game.cancelClick()
-        time.sleep(autohs_config.basic_minion_put_interval)
+        cls.finish_action()
 
 
 class MinionPointMine(MinionCard):
@@ -200,10 +206,12 @@ class MinionPointMine(MinionCard):
         else:
             clicks().hero.chooseMyHero()
         clicks().game.cancelClick()
-        time.sleep(autohs_config.basic_minion_put_interval)
+        cls.finish_action()
 
 
 class WeaponCard(Card):
+    wait_time = autohs_config.basic_weapon_wait_time
+
     @classmethod
     def get_card_type(cls):
         return CARD_WEAPON
@@ -212,7 +220,7 @@ class WeaponCard(Card):
     def use_with_arg(cls, state, card_index, *args):
         clicks().cards.useHandCard(card_index, state.my_hand_card_num)
         clicks().game.cancelClick()
-        time.sleep(autohs_config.basic_weapon_wait_time)
+        cls.finish_action()
 
     @classmethod
     def best_h_and_arg(cls, state, hand_card_index):
@@ -224,6 +232,8 @@ class WeaponCard(Card):
 
 
 class HeroPowerCard(Card):
+    wait_time = autohs_config.hero_power_wait_time
+
     @classmethod
     def get_card_type(cls):
         return CARD_HERO_POWER
@@ -257,6 +267,7 @@ class Coin(SpellNoPoint):
 
 class Location(Card):
     live_value = 0
+    wait_time = autohs_config.basic_minion_put_interval
 
     @classmethod
     def get_card_type(cls):
@@ -273,7 +284,7 @@ class Location(Card):
         gap_index = args[0]
         clicks().cards.putMinionOnBattleGround(card_index, state.my_hand_card_num, gap_index, state.my_minion_num)
         clicks().game.cancelClick()
-        time.sleep(autohs_config.basic_minion_put_interval)
+        cls.finish_action()
 
     @classmethod
     @abstractmethod

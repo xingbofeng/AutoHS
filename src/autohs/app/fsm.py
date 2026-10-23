@@ -5,7 +5,12 @@ import time
 
 from autohs.app.action_confirmation import ActionConfirmation
 from autohs.app.pause import AutomationPaused, pause_controller
-from autohs.config import PLATFORM, autohs_config, bind_window
+from autohs.config import (
+    BATTLEFIELD_STABLE_COUNT,
+    PLATFORM,
+    autohs_config,
+    bind_window,
+)
 from autohs.constants import *
 from autohs.execution.controller import controller
 from autohs.infrastructure.logging import logger
@@ -364,7 +369,7 @@ def _wait_for_action_confirmation(attempt):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return "timeout"
-        time.sleep(min(0.1, remaining))
+        time.sleep(min(autohs_config.action_confirmation_poll_interval, remaining))
 
 
 def _pause_unconfirmed_actions(pending, reason):
@@ -433,7 +438,7 @@ def Battling():
             index = choose_discover_index(log_state, choice)
             logger.info(f"Discover {choice['choice_id']}: option {index + 1}/{len(choice['entities'])}")
             controller.cards.chooseScreenCard(index, len(choice["entities"]))
-            time.sleep(0.7)
+            time.sleep(autohs_config.discover_settle_time)
             clear_decision()
             continue
 
@@ -444,7 +449,11 @@ def Battling():
 
         # 如果是这个我的回合的第一次操作
         if not last_controller_is_me:
-            window_utils.wait_battlefield_stable(autohs_config, 5, 40)
+            window_utils.wait_battlefield_stable(
+                autohs_config,
+                BATTLEFIELD_STABLE_COUNT,
+                40,
+            )
             if not update_log_state():
                 logger.error("战场稳定后状态更新失败")
                 return FSM_ERROR

@@ -13,6 +13,11 @@ import time
 import pyautogui
 
 from autohs.app.pause import pause_controller
+from autohs.config import autohs_config
+
+
+pyautogui.PAUSE = autohs_config.pyautogui_pause
+pyautogui.MINIMUM_DURATION = 0
 
 
 class MouseController:
@@ -28,28 +33,32 @@ class MouseController:
         finally:
             pyautogui.FAILSAFE = True
 
-    def mouseMoveToPosition(self, position, duration=0.2):
+    def mouseMoveToPosition(self, position, duration=None):
         """ 鼠标移动到指定位置 """
+        if duration is None:
+            duration = autohs_config.mouse_move_duration
         pause_controller.checkpoint()
         self._move_out_of_failsafe_corner()
         pause_controller.checkpoint()
-        pyautogui.moveTo(position, duration=duration, tween=pyautogui.easeInOutElastic)
+        pyautogui.moveTo(position, duration=duration, tween=pyautogui.easeInOutQuad)
         pause_controller.checkpoint()
 
-    def mouseDragToPosition(self, position, duration=0.2):
+    def mouseDragToPosition(self, position, duration=None):
         """ 鼠标在当前位置点击不放并移动到指定位置松开 """
+        if duration is None:
+            duration = autohs_config.mouse_move_duration
         pause_controller.checkpoint()
         if sys.platform == "darwin":
             # Unity needs several frames while the pointer is held still.
             pyautogui.mouseDown()
             try:
                 self.mouseMoveToPosition(position, duration=duration)
-                time.sleep(0.3)
+                time.sleep(autohs_config.mouse_drag_hold)
             finally:
                 # Releasing a held button must bypass pause checks.
                 pyautogui.mouseUp()
         else:
-            pyautogui.dragTo(position, duration=duration, tween=pyautogui.easeInOutElastic, button='left')
+            pyautogui.dragTo(position, duration=duration, tween=pyautogui.easeInOutQuad, button='left')
         pause_controller.checkpoint()
 
     def mouseClickPosition(self, position):
@@ -60,7 +69,7 @@ class MouseController:
             # Unity samples button state once per frame.
             pyautogui.mouseDown(position)
             try:
-                time.sleep(0.12)
+                time.sleep(autohs_config.mouse_click_hold)
             finally:
                 pyautogui.mouseUp(position)
         else:

@@ -74,6 +74,7 @@ class StrategyMinion(StrategyEntity):
                  taunt=0, divine_shield=0, stealth=0,
                  windfury=0, poisonous=0, life_steal=0,
                  spell_power=0, freeze=0, battlecry=0,
+                 deathrattle=0,
                  not_targeted_by_spell=0, not_targeted_by_power=0,
                  charge=0, rush=0,
                  attackable_by_rush=0, frozen=0,
@@ -94,6 +95,7 @@ class StrategyMinion(StrategyEntity):
         self.spell_power = spell_power
         self.freeze = freeze
         self.battlecry = battlecry
+        self.deathrattle = deathrattle
 
         # 扰魔实际上叫elusize，不过扰魔的随从出现在战场上时会设置下面两个属性
         self.not_targeted_by_spell = not_targeted_by_spell
@@ -227,6 +229,10 @@ class StrategyMinion(StrategyEntity):
                and not self.untouchable \
                and not self.immune \
                and not self.dormant
+
+    @property
+    def is_harmless_zero_attack_deathrattle(self):
+        return self.attack == 0 and bool(self.deathrattle) and not self.taunt
 
     # 简单介绍一下卡费理论
     # 一点法力水晶 = 抽0.5张卡 = 造成1点伤害 = 2点攻击力 = 2点生命值 = 回复2点血
@@ -567,6 +573,7 @@ def generate_strategy_entity(input_card_entity: CardEntity, log_state : LogState
             life_steal=int(input_card_entity.query_tag("LIFESTEAL")),
             freeze=int(input_card_entity.query_tag("FREEZE")),
             battlecry=int(input_card_entity.query_tag("BATTLECRY")),
+            deathrattle=int(input_card_entity.query_tag("DEATHRATTLE")),
             spell_power=int(input_card_entity.query_tag("SPELLPOWER")),
             not_targeted_by_spell=int(input_card_entity.query_tag("CANT_BE_TARGETED_BY_SPELLS")),
             not_targeted_by_power=int(input_card_entity.query_tag("CANT_BE_TARGETED_BY_HERO_POWERS")),

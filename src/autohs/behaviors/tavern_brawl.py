@@ -1,7 +1,5 @@
 """Safe fallback behaviors for the current Tavern Brawl deck."""
 
-import time
-
 from autohs.behaviors.basic import (
     Location,
     SpellNoPoint,
@@ -14,6 +12,7 @@ from autohs.behaviors.demon_hunter import (
     hero_can_gain_attack,
     setup_lethal,
 )
+from autohs.config import autohs_config
 
 
 class Headhunt(SpellPointOppo):
@@ -73,6 +72,8 @@ class FirstArgusPortal(SpellNoPoint):
 
 
 class Cliffside(Location):
+    wait_time = autohs_config.location_trigger_wait_time
+
     value = 2.0
     keep_in_hand_bool = False
 
@@ -131,7 +132,7 @@ class Cliffside(Location):
     def location_trigger(cls, state, my_minion_index, args):
         clicks().minion.chooseMyMinion(my_minion_index, state.my_minion_num)
         clicks().game.cancelClick()
-        time.sleep(1)
+        cls.finish_action()
 
 
 class PerpetualLegacy(SpellNoPoint):

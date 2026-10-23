@@ -6,6 +6,7 @@ from autohs.constants import (
     COORDINATE_BATTLEFILED_RANGE_X,
     COORDINATE_BATTLEFILED_RANGE_Y,
 )
+from autohs.config import BATTLEFIELD_STABLE_INTERVAL
 from autohs.desktop.window_service import _darwin
 from autohs.infrastructure.logging import logger
 
@@ -83,7 +84,8 @@ def wait_battlefield_stable(autohs_config, wait_count=3, max_try=40):
                 stable_count = 0
 
         last_battlefield_snapshot = current
-        if end_time - start_time < 0.3:
-            time.sleep(0.3 - (end_time - start_time))
+        elapsed = end_time - start_time
+        if elapsed < BATTLEFIELD_STABLE_INTERVAL:
+            time.sleep(BATTLEFIELD_STABLE_INTERVAL - elapsed)
 
     logger.warning("等待战场稳定超时")

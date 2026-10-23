@@ -3,6 +3,7 @@
 import os
 import time
 
+from autohs.config import LOG_TAIL_IDLE_INTERVAL
 from autohs.constants import LOG_CONTAINER_ERROR, LOG_CONTAINER_INFO
 from autohs.infrastructure.logging import logger
 from autohs.logs.events import LogInfoContainer
@@ -39,7 +40,7 @@ def _tail_log(source_path, file_name, parse_func, boundary):
                     handle = None
                 logger.warning(f"等待{file_name}生成, 路径为: {source_path}")
                 yield LogInfoContainer(LOG_CONTAINER_ERROR)
-                time.sleep(0.2)
+                time.sleep(LOG_TAIL_IDLE_INTERVAL)
                 continue
             stat = os.stat(path)
             if handle is None or path != current_path or (stat.st_dev, stat.st_ino) != identity \
@@ -58,7 +59,7 @@ def _tail_log(source_path, file_name, parse_func, boundary):
             while True:
                 line = handle.readline()
                 if line == "":
-                    time.sleep(0.2)
+                    time.sleep(LOG_TAIL_IDLE_INTERVAL)
                     empty_line_count += 1
                     if empty_line_count == 2:
                         break

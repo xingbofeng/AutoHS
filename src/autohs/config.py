@@ -27,9 +27,21 @@ REPLACE_COST_BAR = 3
 OPERATE_INTERVAL = 0.2
 STATE_CHECK_INTERVAL = 1
 TINY_OPERATE_INTERVAL = 0.1
-BASIC_MINION_PUT_INTERVAL = 0.8
-BASIC_SPELL_WAIT_TIME = 1.5
-BASIC_WEAPON_WAIT_TIME = 1
+BASIC_MINION_PUT_INTERVAL = 0.6
+BASIC_SPELL_WAIT_TIME = 1.2
+BASIC_WEAPON_WAIT_TIME = 0.8
+HERO_POWER_WAIT_TIME = 0.8
+LOCATION_TRIGGER_WAIT_TIME = 0.8
+POST_ACTION_SETTLE_TIME = 0.6
+DISCOVER_SETTLE_TIME = 0.6
+MOUSE_MOVE_DURATION = 0.08
+MOUSE_CLICK_HOLD = 0.08
+MOUSE_DRAG_HOLD = 0.12
+PYAUTOGUI_PAUSE = 0.02
+ACTION_CONFIRMATION_POLL_INTERVAL = 0.05
+LOG_TAIL_IDLE_INTERVAL = 0.05
+BATTLEFIELD_STABLE_INTERVAL = 0.15
+BATTLEFIELD_STABLE_COUNT = 3
 PLATFORM = platform.system()
 
 
@@ -58,6 +70,15 @@ class AutoHSConfig:
         self.basic_minion_put_interval = BASIC_MINION_PUT_INTERVAL
         self.basic_spell_wait_time = BASIC_SPELL_WAIT_TIME
         self.basic_weapon_wait_time = BASIC_WEAPON_WAIT_TIME
+        self.hero_power_wait_time = HERO_POWER_WAIT_TIME
+        self.location_trigger_wait_time = LOCATION_TRIGGER_WAIT_TIME
+        self.post_action_settle_time = POST_ACTION_SETTLE_TIME
+        self.discover_settle_time = DISCOVER_SETTLE_TIME
+        self.mouse_move_duration = MOUSE_MOVE_DURATION
+        self.mouse_click_hold = MOUSE_CLICK_HOLD
+        self.mouse_drag_hold = MOUSE_DRAG_HOLD
+        self.pyautogui_pause = PYAUTOGUI_PAUSE
+        self.action_confirmation_poll_interval = ACTION_CONFIRMATION_POLL_INTERVAL
 
     def save_config(self, path="configs.json"):
         try:

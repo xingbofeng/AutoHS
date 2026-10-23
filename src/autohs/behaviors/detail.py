@@ -276,7 +276,7 @@ class ArmorVendor(MinionNoPoint):
 
 # 神圣惩击
 class HolySmite(SpellPointOppo):
-    wait_time = 2
+    wait_time = 1.6
     # 加个bias,一是包含了消耗的水晶的代价，二是包含了消耗了手牌的代价
     bias = -2
 
@@ -298,7 +298,7 @@ class HolySmite(SpellPointOppo):
 
 # 倦怠光波
 class WaveOfApathy(SpellNoPoint):
-    wait_time = 2
+    wait_time = 1.6
     bias = -4
 
     @classmethod
@@ -319,7 +319,7 @@ class BonechewerBrawler(MinionNoPoint):
 
 # 暗言术灭
 class ShadowWordDeath(SpellPointOppo):
-    wait_time = 1.5
+    wait_time = 1.2
     bias = -6
 
     @classmethod
@@ -373,7 +373,7 @@ class DeathsHeadCultist(MinionNoPoint):
 
 # 噬灵疫病
 class DevouringPlague(SpellNoPoint):
-    wait_time = 4
+    wait_time = 3.2
     bias = -4  # 把吸的血直接算进bias
 
     @classmethod
@@ -411,7 +411,7 @@ class HolyNova(SpellNoPoint):
 
 # 狂乱
 class Hysteria(SpellPointOppo):
-    wait_time = 5
+    wait_time = 4.0
     bias = -9  # 我觉得狂乱应该要能力挽狂澜
     keep_in_hand_bool = False
 
@@ -522,7 +522,7 @@ class MutanusTheDevourer(MinionNoPoint):
 
 # 灵魂之镜
 class SoulMirror(SpellNoPoint):
-    wait_time = 5
+    wait_time = 4.0
     bias = -16
     keep_in_hand_bool = False
 
@@ -588,7 +588,7 @@ class ShipSurgeon(MinionNoPoint):
 
 # 亡者复生
 class RaiseDead(SpellNoPoint):
-    wait_time = 5
+    wait_time = 4.0
     keep_in_hand_bool = False
 
     @classmethod
@@ -621,7 +621,7 @@ class ShadowBomber(MinionNoPoint):
 # 精神灼烧
 # TODO: 理论上可以打死自己的随从实现斩杀...
 class MindBlast(SpellPointOppo):
-    wait_time = 2
+    wait_time = 1.6
     bias = -1
     keep_in_hand_bool = False   # 大数据显示起手留它正收益，但是很难用好这张牌
 
@@ -651,7 +651,7 @@ class MindBlast(SpellPointOppo):
 
 # 针灸
 class Acupuncture(SpellNoPoint):
-    wait_time = 2
+    wait_time = 1.6
     bias = -0.5
     keep_in_hand_bool = False
 
@@ -672,7 +672,7 @@ class Acupuncture(SpellNoPoint):
 
 # 心灵震爆
 class MindShatter(SpellNoPoint):
-    wait_time = 2
+    wait_time = 1.6
     bias = -1
     keep_in_hand_bool = False
 

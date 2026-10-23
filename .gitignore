@@ -10,6 +10,8 @@ wheels/
 img/
 backup.md
 test*
+!tests/
+!tests/test_*.py
 *.json
 *.log
 *.txt

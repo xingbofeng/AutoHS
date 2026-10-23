@@ -9,7 +9,6 @@ from autohs.behaviors.basic import (
     SpellPointOppo,
     clicks,
 )
-from autohs.config import autohs_config
 
 
 class GhoulCharge(HeroPowerCard):
@@ -22,7 +21,7 @@ class GhoulCharge(HeroPowerCard):
     @classmethod
     def use_with_arg(cls, state, card_index, *args):
         clicks().hero.useSkill()
-        time.sleep(1)
+        cls.finish_action()
 
 
 class SkeletalSidekick(MinionNoPoint):
@@ -51,7 +50,7 @@ class SkeletalSidekick(MinionNoPoint):
             shifted_target = target + int(gap <= target)
             clicks().minion.chooseMyMinion(shifted_target, state.my_minion_num + 1)
         clicks().game.cancelClick()
-        time.sleep(autohs_config.basic_minion_put_interval)
+        cls.finish_action()
 
 
 class DrawMinion(MinionNoPoint):
