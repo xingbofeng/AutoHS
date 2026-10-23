@@ -1,8 +1,11 @@
+import os
 import random
 import sys
 import time
 
-from autohs.config import PLATFORM, autohs_config
+from autohs.app.action_confirmation import ActionConfirmation
+from autohs.app.pause import AutomationPaused, pause_controller
+from autohs.config import PLATFORM, autohs_config, bind_window
 from autohs.constants import *
 from autohs.execution.controller import controller
 from autohs.infrastructure.logging import logger
@@ -11,6 +14,7 @@ from autohs.logs.power import parse_line
 from autohs.logs.reader import log_iter_func
 from autohs.logs.state import LogState, update_state
 from autohs.paths.install import darwin_install_root, hearthstone_log_dir
+from autohs.strategy.discover import choose_discover_index
 from autohs.strategy.state import StrategyState
 
 
@@ -38,10 +42,12 @@ log_iter = None
 log_iter_loading_screen = None
 choose_hero_count = 0
 last_state_in_log = SCREEN_MODE_STARTUP
+loading_screen_mode_seen = False
 
 
 def init():
     global log_state, log_iter, log_iter_loading_screen, choose_hero_count, autohs_config
+    global loading_screen_mode_seen, last_state_in_log
     root = autohs_config.hearthstone_install_path
     if PLATFORM == "Darwin":
         root = darwin_install_root(root)
@@ -50,18 +56,34 @@ def init():
     logger.debug("初始化日志状态")
     log_state = LogState()
     last_state_in_log = SCREEN_MODE_STARTUP
-    log_iter = log_iter_func(log_path, "Power.log", parse_line)
-    log_iter_loading_screen = log_iter_func(log_path, "LoadingScreen.log", parse_line_loading_screen)
+    loading_screen_mode_seen = False
+    log_iter = log_iter_func(
+        log_path,
+        "Power.log",
+        parse_line,
+    )
+    log_iter_loading_screen = log_iter_func(
+        log_path,
+        "LoadingScreen.log",
+        parse_line_loading_screen,
+        start_at_end=True,
+    )
     choose_hero_count = 0
 
 def get_state():
+    if log_state.available and not log_state.is_end:
+        if log_state.game_step in (SCREEN_MODE_STARTUP, ""):
+            return FSM_WAIT_MAIN_MENU
+        if log_state.game_num_turns_in_play > 0:
+            return FSM_BATTLING
+        return FSM_CHOOSING_CARD
     if autohs_config.has_loading_screen:
         return get_state_from_log()
     else:
         return window_utils.get_state()
 
 def get_state_from_log():
-    global log_iter_loading_screen, last_state_in_log
+    global log_iter_loading_screen, last_state_in_log, loading_screen_mode_seen
 
     if not window_utils.test_hs_available():
         return FSM_LEAVE_HS
@@ -69,6 +91,12 @@ def get_state_from_log():
     log_container = next(log_iter_loading_screen)
     if log_container.log_type == LOG_CONTAINER_ERROR:
         return FSM_ERROR
+    if log_container.log_type == LOG_CONTAINER_LOG_SESSION:
+        last_state_in_log = SCREEN_MODE_STARTUP
+        loading_screen_mode_seen = False
+        log_container = next(log_iter_loading_screen)
+        if log_container.log_type == LOG_CONTAINER_ERROR:
+            return FSM_ERROR
 
     for log_line_container in log_container.message_list:
         if log_line_container.line_type == LOG_LINE_MODE_CHANGE:
@@ -79,16 +107,23 @@ def get_state_from_log():
                 logger.error(f"日志状态不连续，记录状态:{last_state_in_log}，日志状态{prev_state}->{curr_state}")
 
             last_state_in_log = curr_state
+            loading_screen_mode_seen = True
+
+    if not loading_screen_mode_seen or last_state_in_log == "FATAL_ERROR":
+        # LoadingScreen.log may contain only historical scene changes from a
+        # previous run. Use the live window until the current run writes a new
+        # mode, and recover visually if Hearthstone logged a transient fatal
+        # transition.
+        logger.debug("加载界面日志尚无当前场景，使用画面识别")
+        return window_utils.get_state()
 
     screen_state_to_fsm = {
         SCREEN_MODE_STARTUP: FSM_WAIT_MAIN_MENU,
         SCREEN_MODE_LOGIN: FSM_WAIT_MAIN_MENU,
         SCREEN_MODE_HUB: FSM_MAIN_MENU,
+        SCREEN_MODE_GAME_MODE: FSM_MAIN_MENU,
         SCREEN_MODE_TOURNAMENT: FSM_CHOOSING_HERO,
-        SCREEN_MODE_COLLECTIONMANAGER: FSM_ERROR,
         SCREEN_MODE_GAMEPLAY: FSM_CHOOSING_CARD,       # 如果已经留过牌了，则会进入对战状态
-        SCREEN_MODE_TRAVEN_BRAWL: FSM_ERROR,
-        SCREEN_MODE_BACON: FSM_ERROR,
     }
 
     if last_state_in_log in screen_state_to_fsm:
@@ -102,7 +137,32 @@ def get_state_from_log():
         logger.error(f"未知的游戏状态: {last_state_in_log}")
         return FSM_ERROR
 
+def bootstrap_log_state():
+    """Recover state when the runner starts during an existing match."""
+    global log_state, log_iter
+    root = autohs_config.hearthstone_install_path
+    if PLATFORM == "Darwin":
+        root = darwin_install_root(root)
+    log_dir = hearthstone_log_dir(root)
+    subdirs = [entry for entry in os.listdir(log_dir) if os.path.isdir(os.path.join(log_dir, entry))]
+    if not subdirs:
+        return
+    power_path = os.path.join(log_dir, max(subdirs), "Power.log")
+    if not os.path.isfile(power_path):
+        return
+
+    logger.info("启动时已在对局中，重建当前对局状态")
+    log_state = LogState()
+    # Replay and subsequent updates share a cursor, so no live events can fall
+    # into a gap between closing the replay and opening a new tail reader.
+    log_iter = log_iter_func(power_path, "Power.log", parse_line)
+    for line_container in next(log_iter).message_list:
+        update_state(log_state, line_container)
+
+
 def update_log_state():
+    global log_state, log_iter
+    pause_controller.checkpoint()
     log_container = next(log_iter)
     if log_container.log_type == LOG_CONTAINER_ERROR:
         return False
@@ -178,7 +238,14 @@ def ChoosingHeroAction():
     if choose_hero_count >= 20:
         return FSM_ERROR
 
+    if PLATFORM == "Darwin":
+        controller.game.enterHS()
     time.sleep(2)
+    if PLATFORM == "Darwin":
+        rect = window_utils.get_window_pos(window_utils.get_HS_hwnd())
+        if rect is None:
+            return FSM_ERROR
+        bind_window(*rect)
     controller.game.matchOpponent()
     time.sleep(1)
     return FSM_MATCHING_OPPONENT
@@ -216,7 +283,7 @@ def ChoosingCardAction():
     global time_begin
 
     ok = update_log_state()
-    if log_state.game_num_turns_in_play > 0:
+    if ok and log_state.game_num_turns_in_play > 0:
         return FSM_BATTLING
 
     choose_hero_count = 0
@@ -277,13 +344,46 @@ def ChoosingCardAction():
         time.sleep(autohs_config.state_check_interval)
 
 
+def _wait_for_action_confirmation(attempt):
+    deadline = time.monotonic() + 3.0
+    while True:
+        pause_controller.checkpoint()
+        if quitting_flag:
+            return "stopped"
+        if not update_log_state():
+            return "error"
+        pause_controller.checkpoint()
+        if quitting_flag:
+            return "stopped"
+        if not attempt.same_context(log_state):
+            return "changed"
+        if attempt.confirmed(log_state):
+            return "confirmed"
+        if getattr(log_state, "pending_choice", None) is not None:
+            return "changed"
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return "timeout"
+        time.sleep(min(0.1, remaining))
+
+
+def _pause_unconfirmed_actions(pending, reason):
+    logger.error(
+        f"{reason}; unconfirmed actions: {list(pending)}; automation paused for review"
+    )
+    pause_controller.set_paused(True)
+    return FSM_BATTLING
+
+
 def Battling():
     global win_count
     global log_state
 
     not_mine_count = 0
-    mine_count = 0
     last_controller_is_me = False
+    settling_deadline = None
+    # A successful input from another actor cannot acknowledge a failed one.
+    pending_confirmations = {}
 
     while True:
         if quitting_flag:
@@ -291,6 +391,7 @@ def Battling():
 
         ok = update_log_state()
         if not ok:
+            logger.error("对战状态更新失败")
             return FSM_ERROR
 
         if log_state.is_end:
@@ -301,16 +402,39 @@ def Battling():
                 logger.info("你输了")
             return FSM_QUITTING_BATTLE
 
+        for key, (pending, _) in list(pending_confirmations.items()):
+            if not pending.same_context(log_state):
+                del pending_confirmations[key]
+                last_controller_is_me = False
+                settling_deadline = None
+            elif pending.confirmed(log_state):
+                del pending_confirmations[key]
+                clear_decision()
+
         # 在对方回合等就行了
         if not log_state.is_my_turn:
             last_controller_is_me = False
-            mine_count = 0
+            settling_deadline = None
 
             not_mine_count += 1
             if not_mine_count >= 400:
                 logger.warning("Time out in Opponent's turn")
                 return FSM_ERROR
 
+            continue
+
+        choice = log_state.pending_choice
+        if choice is not None:
+            settling_deadline = None
+            choice["attempts"] += 1
+            if choice["attempts"] > 8:
+                logger.error("Discover choice did not close after eight attempts")
+                return FSM_ERROR
+            index = choose_discover_index(log_state, choice)
+            logger.info(f"Discover {choice['choice_id']}: option {index + 1}/{len(choice['entities'])}")
+            controller.cards.chooseScreenCard(index, len(choice["entities"]))
+            time.sleep(0.7)
+            clear_decision()
             continue
 
         # 接下来考虑在我的回合的出牌逻辑
@@ -321,6 +445,12 @@ def Battling():
         # 如果是这个我的回合的第一次操作
         if not last_controller_is_me:
             window_utils.wait_battlefield_stable(autohs_config, 5, 40)
+            if not update_log_state():
+                logger.error("战场稳定后状态更新失败")
+                return FSM_ERROR
+            if log_state.is_end or not log_state.is_my_turn:
+                continue
+            strategy_state = StrategyState(log_state)
             clear_decision()
             # 在游戏的第一个我的回合, 发一个你好
             # game_num_turns_in_play在每一个回合开始时都会加一, 即
@@ -339,49 +469,82 @@ def Battling():
 
         last_controller_is_me = True
         not_mine_count = 0
-        mine_count += 1
 
-        if mine_count >= 20:
-            if mine_count >= 40:
+        action, index, args = strategy_state.next_battle_action()
+        attempt = None
+        if action in ("location", "card", "attack"):
+            if hasattr(log_state, "entity_dict"):
+                attempt = ActionConfirmation.capture(log_state, strategy_state, action, index)
+                if attempt is not None:
+                    if not update_log_state():
+                        return FSM_ERROR
+                    pause_controller.checkpoint()
+                    if not attempt.current(log_state):
+                        attempt = None
+                if attempt is None:
+                    if settling_deadline is None:
+                        settling_deadline = time.monotonic() + 3.0
+                    remaining = settling_deadline - time.monotonic()
+                    if remaining <= 0:
+                        if pending_confirmations:
+                            return _pause_unconfirmed_actions(
+                                pending_confirmations,
+                                "Battlefield did not settle after an unconfirmed input",
+                            )
+                        logger.warning(
+                            "Battlefield did not settle within three seconds; requesting a fresh snapshot"
+                        )
+                        return FSM_BATTLING
+                    pause_controller.checkpoint()
+                    time.sleep(min(0.1, remaining))
+                    continue
+                settling_deadline = None
+            elif check_repeat_decision(hash(action + str(index) + str(args))):
                 return FSM_ERROR
-            controller.game.endTurn()
-            controller.game.commitErrorReport()
-            controller.game.cancelClick()
-            time.sleep(autohs_config.state_check_interval)
 
-        # 因为赎罪教堂可以抽牌，所以最先考虑使用地标
-        index, args = strategy_state.get_best_location_trigger()
-        if index != -1:
-            if check_repeat_decision(hash("location" + str(index) + str(args))):
-                return FSM_ERROR
+        pause_controller.checkpoint()
+        if quitting_flag:
+            return
+        if action == "location":
             logger.info(f"将触发地标[{index}], args: {args}")
             strategy_state.my_minions[index].detail_card.location_trigger(strategy_state, index, args)
-            continue
-
-        # 考虑要不要出牌
-        index, args = strategy_state.best_h_index_arg()
-
-        # index == -1 代表使用技能, -2 代表不出牌
-        if index != -2:
-            if check_repeat_decision(hash("card" + str(index) + str(args))):
-                return FSM_ERROR
+        elif action == "card":
             strategy_state.use_best_entity(index, args)
-            continue
-
-        # 如果不出牌, 考虑随从怎么打架
-        my_index, oppo_index = strategy_state.get_best_attack_target()
-
-        # my_index == -1 代表英雄攻击, -2 代表不攻击
-        if my_index != -2:
-            if check_repeat_decision(hash("attack" + str(my_index) + str(oppo_index))):
-                return FSM_ERROR
-            strategy_state.my_entity_attack_oppo(my_index, oppo_index)
+        elif action == "attack":
+            strategy_state.my_entity_attack_oppo(index, args)
         else:
+            if pending_confirmations:
+                return _pause_unconfirmed_actions(
+                    pending_confirmations,
+                    "Cannot end turn while actions remain unconfirmed",
+                )
             if autohs_config.give_up_with_dignity and strategy_state.will_die_next_turn():
                 controller.game.giveUpRoutine()
             else:
                 controller.game.endTurn()
                 time.sleep(autohs_config.state_check_interval)
+
+        if attempt is not None:
+            key = (action, attempt.entity_id)
+            failures = pending_confirmations.get(key, (None, 0))[1]
+            pending_confirmations[key] = (attempt, failures)
+            result = _wait_for_action_confirmation(attempt)
+            if result == "confirmed":
+                del pending_confirmations[key]
+                clear_decision()
+            elif result == "timeout":
+                pending_confirmations[key] = (attempt, failures + 1)
+                if sum(count for _, count in pending_confirmations.values()) >= 3:
+                    return _pause_unconfirmed_actions(
+                        pending_confirmations,
+                        "Three inputs were not confirmed by Power.log",
+                    )
+                pause_controller.checkpoint()
+                controller.game.cancelClick()
+            elif result == "error":
+                return FSM_ERROR
+            elif result == "stopped":
+                return
 
 
 def QuittingBattle():
@@ -402,7 +565,7 @@ def QuittingBattle():
         if quitting_flag:
             return FSM_ERROR
 
-        state = window_utils.get_state()
+        state = get_state()
         if state in [FSM_CHOOSING_HERO, FSM_LEAVE_HS]:
             return state
         controller.game.cancelClick()
@@ -515,15 +678,34 @@ def FSM_dispatch(next_state):
 def AutoHS_automata():
     global FSM_state
 
-    if window_utils.test_hs_available():
-        hs_hwnd = window_utils.get_HS_hwnd()
-        window_utils.move_window_foreground(hs_hwnd)
-        time.sleep(0.5)
+    if PLATFORM == "Darwin":
+        pause_controller.start()
+        logger.info("暂停/继续快捷键: Cmd+Shift+P")
+    try:
+        if window_utils.test_hs_available():
+            hs_hwnd = window_utils.get_HS_hwnd()
+            window_utils.move_window_foreground(hs_hwnd)
+            time.sleep(0.5)
 
-    while 1:
-        if quitting_flag:
-            return
-        if FSM_state == "":
-            FSM_state = get_state()
-        logger.debug("下一个状态: " + str(FSM_state))
-        FSM_state = FSM_dispatch(FSM_state)
+        while not quitting_flag:
+            try:
+                pause_controller.checkpoint()
+                if FSM_state == "":
+                    FSM_state = get_state()
+                    if FSM_state == FSM_BATTLING and not log_state.available:
+                        bootstrap_log_state()
+                logger.debug("下一个状态: " + str(FSM_state))
+                FSM_state = FSM_dispatch(FSM_state)
+            except AutomationPaused:
+                if not pause_controller.wait():
+                    raise RuntimeError("Pause listener stopped; automation input disabled")
+                # A manual move can change every target while paused.
+                clear_decision()
+                FSM_state = ""
+                if window_utils.test_hs_available():
+                    window_utils.move_window_foreground(window_utils.get_HS_hwnd())
+                    time.sleep(0.5)
+                controller.game.cancelClick()
+    finally:
+        if PLATFORM == "Darwin":
+            pause_controller.stop()

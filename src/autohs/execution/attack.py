@@ -37,4 +37,6 @@ class AttackController(CardsController, HeroController, MinionController, GameCo
 
     def myHeroAttackEnemyMinion(self, oppo_index, oppo_num):
         self.chooseMyHero()
+        # Hearthstone needs a short animation gap before accepting the target.
+        sleep(0.15)
         self.chooseEnemyMinion(oppo_index, oppo_num)

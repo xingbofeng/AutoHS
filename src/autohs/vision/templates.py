@@ -1,4 +1,4 @@
-"""Eight screen templates. cv2.imread runs on the first images() call."""
+"""Screen templates. cv2.imread runs on the first images() call."""
 
 from pathlib import Path
 
@@ -12,6 +12,7 @@ _NAMES = (
     "main_menu_2k",
     "choose_card_1080",
     "choose_hero_1080",
+    "choose_hero_macos_1080",
     "matching_1080",
     "main_menu_1080",
 )

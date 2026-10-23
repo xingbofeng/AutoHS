@@ -1,14 +1,20 @@
-from autohs.catalog.lookup import query_json_get_dict, query_json_get_name, query_json_get_races, query_json_get_spell_school
+import copy
 from abc import abstractmethod
+from enum import Enum
+from typing import TYPE_CHECKING
+
+from autohs.behaviors.basic import Card
 from autohs.behaviors.registry import ID2CARD_DICT
+from autohs.catalog.lookup import (
+    query_json_get_dict,
+    query_json_get_name,
+    query_json_get_races,
+    query_json_get_spell_school,
+)
+from autohs.config import autohs_config
 from autohs.constants import *
 from autohs.infrastructure.logging import logger
-from autohs.logs.state import LogState, CardEntity
-import copy
-from autohs.config import autohs_config
-from typing import TYPE_CHECKING
-from autohs.behaviors.basic import Card
-from enum import Enum
+from autohs.logs.state import CardEntity, LogState
 
 
 class StrategyEntity:
@@ -72,7 +78,7 @@ class StrategyMinion(StrategyEntity):
                  charge=0, rush=0,
                  attackable_by_rush=0, frozen=0,
                  dormant=0, untouchable=0, immune=0,
-                 cant_attack=0, exhausted=1, num_turns_in_play=1
+                 cant_attack=0, exhausted=1, num_turns_in_play=1, silenced=0
         ):
         super().__init__(card_id, zone, zone_pos,
                          current_cost, overload, is_mine, powered_up)
@@ -103,6 +109,7 @@ class StrategyMinion(StrategyEntity):
         self.untouchable = untouchable
         self.immune = immune
         self.cant_attack = cant_attack
+        self.silenced = silenced
         self.num_turns_in_play = num_turns_in_play
         # exhausted == 1: 随从没有绿边, 不能动
         # 普通随从一入场便具有 exhausted == 1,
@@ -334,7 +341,7 @@ class StrategyHero(StrategyEntity):
                  max_health, damage=0,
                  stealth=0, immune=0,
                  not_targeted_by_spell=0, not_targeted_by_power=0,
-                 armor=0, attack=0, exhausted=1):
+                 armor=0, attack=0, exhausted=1, frozen=0, cant_attack=0):
         super().__init__(card_id, zone, zone_pos,
                          current_cost, overload, is_mine, powered_up)
         self.max_health = max_health
@@ -346,6 +353,8 @@ class StrategyHero(StrategyEntity):
         self.armor = armor
         self.attack = attack
         self.exhausted = exhausted
+        self.frozen = frozen
+        self.cant_attack = cant_attack
 
     def __str__(self):
         temp = f"{self.name} {self.attack}-{self.health}" \
@@ -387,7 +396,7 @@ class StrategyHero(StrategyEntity):
 
     @property
     def can_attack(self):
-        return self.attack > 0 and not self.exhausted
+        return self.attack > 0 and not self.exhausted and not self.frozen and not self.cant_attack
 
     @property
     def can_be_pointed_by_spell(self):
@@ -448,13 +457,13 @@ class StrategySpell(StrategyEntity):
 class StrategyLocation(StrategyMinion):
     def __init__(self, card_id, zone, zone_pos,
                  current_cost, overload, is_mine, powered_up,
-                 max_health, exhausted):
+                 max_health, exhausted, damage=0):
         super().__init__(card_id, zone, zone_pos,
                          current_cost, overload, is_mine, powered_up,
-                         0, max_health, exhausted=exhausted)
+                         0, max_health, damage=damage, exhausted=exhausted)
 
     def __str__(self):
-        return f"[{self.zone_pos}] {self.name} 耐久:{self.max_health}"
+        return f"[{self.zone_pos}] {self.name} 耐久:{self.health}"
 
     @property
     def cardtype(self):
@@ -519,7 +528,13 @@ class StrategyHeroPower(StrategyEntity):
 
     @property
     def detail_hero_power(self):
-        if self.name == "次级治疗术":
+        if self.name in ("食尸鬼冲锋", "食尸鬼狂暴"):
+            return ID2CARD_DICT["HERO_11bp"]
+        if self.card_id in ("HERO_10bp", "HERO_10bp2"):
+            return ID2CARD_DICT[self.card_id]
+        elif self.name in ("恶魔之爪", "恶魔之咬"):
+            return ID2CARD_DICT["HERO_10bp" if self.name == "恶魔之爪" else "HERO_10bp2"]
+        elif self.name == "次级治疗术":
             return ID2CARD_DICT["LESSER_HEAL"]
         elif self.name == "图腾召唤":
             return ID2CARD_DICT["TOTEMIC_CALL"]
@@ -549,6 +564,7 @@ def generate_strategy_entity(input_card_entity: CardEntity, log_state : LogState
             stealth=int(input_card_entity.query_tag("STEALTH")),
             windfury=int(input_card_entity.query_tag("WINDFURY")),
             poisonous=int(input_card_entity.query_tag("POISONOUS")),
+            life_steal=int(input_card_entity.query_tag("LIFESTEAL")),
             freeze=int(input_card_entity.query_tag("FREEZE")),
             battlecry=int(input_card_entity.query_tag("BATTLECRY")),
             spell_power=int(input_card_entity.query_tag("SPELLPOWER")),
@@ -564,6 +580,7 @@ def generate_strategy_entity(input_card_entity: CardEntity, log_state : LogState
             # -1代表标签缺失, 有两种情况会产生-1: 断线重连; 卡刚从手牌中被打出来
             exhausted=int(input_card_entity.query_tag("EXHAUSTED")),
             cant_attack=int(input_card_entity.query_tag("CANT_ATTACK")),
+            silenced=int(input_card_entity.query_tag("SILENCED")),
             num_turns_in_play=int(input_card_entity.query_tag("NUM_TURNS_IN_PLAY")),
         )
     elif input_card_entity.cardtype == "SPELL":
@@ -586,7 +603,9 @@ def generate_strategy_entity(input_card_entity: CardEntity, log_state : LogState
             is_mine=log_state.is_my_entity(input_card_entity),
             powered_up=int(input_card_entity.query_tag("POWERED_UP")),
             attack=int(input_card_entity.query_tag("ATK")),
-            durability=int(input_card_entity.query_tag("DURABILITY")),
+            durability=int(input_card_entity.query_tag(
+                "HEALTH", input_card_entity.query_tag("DURABILITY"),
+            )),
             damage=int(input_card_entity.query_tag("DAMAGE")),
             windfury=int(input_card_entity.query_tag("WINDFURY")),
         )
@@ -608,6 +627,8 @@ def generate_strategy_entity(input_card_entity: CardEntity, log_state : LogState
             armor=int(input_card_entity.query_tag("ARMOR")),
             attack=int(input_card_entity.query_tag("ATK")),
             exhausted=int(input_card_entity.query_tag("EXHAUSTED")),
+            frozen=int(input_card_entity.query_tag("FROZEN")),
+            cant_attack=int(input_card_entity.query_tag("CANT_ATTACK")),
         )
     elif input_card_entity.cardtype == "HERO_POWER":
         return StrategyHeroPower(
@@ -631,6 +652,7 @@ def generate_strategy_entity(input_card_entity: CardEntity, log_state : LogState
             powered_up=int(input_card_entity.query_tag("POWERED_UP")),
             max_health=int(input_card_entity.query_tag("HEALTH")),
             exhausted=int(input_card_entity.query_tag("EXHAUSTED")),
+            damage=int(input_card_entity.query_tag("DAMAGE")),
         )
     else:
         logger.warning(f"未知卡牌类型{input_card_entity.cardtype}")

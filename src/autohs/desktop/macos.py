@@ -17,9 +17,35 @@ def get_installed_application(app_name):
 def find_running_application_pid(app_name=None, pid=None):
     import psutil
 
-    for proc in psutil.process_iter(["pid", "name", "username", "cpu_percent", "memory_percent"]):
+    if app_name == "Hearthstone":
+        window_pid = hearthstone_window_pid()
+        if window_pid:
+            return window_pid
+
+    for proc in psutil.process_iter(["pid", "name"]):
         if proc.info["name"] == app_name:
             return proc.info["pid"]
+    return 0
+
+
+def hearthstone_window_pid():
+    """Use the game's visible window when process names are localized."""
+    import Quartz
+
+    windows = Quartz.CGWindowListCopyWindowInfo(
+        Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
+        Quartz.kCGNullWindowID,
+    )
+    for window in windows:
+        bounds = window.get("kCGWindowBounds", {})
+        if window.get("kCGWindowLayer", 0) != 0:
+            continue
+        if bounds.get("Width", 0) < 640 or bounds.get("Height", 0) < 480:
+            continue
+        owner = str(window.get("kCGWindowOwnerName", "")).lower()
+        title = str(window.get("kCGWindowName", "")).lower()
+        if "hearthstone" in owner or "hearthstone" in title:
+            return int(window["kCGWindowOwnerPID"])
     return 0
 
 
@@ -70,6 +96,8 @@ def move_window_foreground(app_name=None, pid=None):
         app_name = "Hearthstone"
     workspace = AppKit.NSWorkspace.sharedWorkspace()
     application = find_running_application(app_name, pid)
+    if application and application.activateWithOptions_(AppKit.NSApplicationActivateIgnoringOtherApps):
+        return True
     if not application:
         application = get_installed_application(app_name)
     bundle_identifier = application.bundleIdentifier()
@@ -84,17 +112,31 @@ def move_window_foreground(app_name=None, pid=None):
 def get_window_rect(pid):
     import Quartz
 
-    windows = Quartz.CGWindowListCopyWindowInfo(
+    if not pid:
+        return None
+    candidates = []
+    for options in (
         Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
-        Quartz.kCGNullWindowID,
-    )
-    for window in windows:
-        window_pid = int(window["kCGWindowOwnerPID"])
-        if not window_pid == pid:
-            continue
-        bounds = window.get("kCGWindowBounds")
-        left = bounds["X"]
-        top = bounds["Y"]
-        right = left + bounds["Width"]
-        bottom = top + bounds["Height"]
-        return left, top, right, bottom
+        Quartz.kCGWindowListOptionAll,
+    ):
+        windows = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID)
+        candidates = [
+            window for window in windows
+            if int(window["kCGWindowOwnerPID"]) == pid
+            and window.get("kCGWindowLayer", 0) == 0
+            and window.get("kCGWindowIsOnscreen") is not False
+            and window.get("kCGWindowAlpha", 1) > 0
+            and window.get("kCGWindowBounds", {}).get("Width", 0) >= 640
+            and window.get("kCGWindowBounds", {}).get("Height", 0) >= 480
+        ]
+        if candidates:
+            break
+    if not candidates:
+        return None
+    window = max(candidates, key=lambda item: (
+        item.get("kCGWindowName") == "Hearthstone",
+        item["kCGWindowBounds"]["Width"] * item["kCGWindowBounds"]["Height"],
+    ))
+    bounds = window["kCGWindowBounds"]
+    left, top = bounds["X"], bounds["Y"]
+    return left, top, left + bounds["Width"], top + bounds["Height"]

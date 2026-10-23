@@ -8,9 +8,9 @@ __Created__ = "2025/04/26"
 __Description__ = ""
 """
 
+from autohs.config import live_click_coordinates as coors
 from autohs.constants import *
 from autohs.execution.mouse import MouseController
-from autohs.config import live_click_coordinates as coors
 
 
 class CardsController(MouseController):
@@ -36,15 +36,26 @@ class CardsController(MouseController):
         else:
             self.mouseDragToPosition([coors[COORDINATE_MID_X], coors[COORDINATE_NO_OP_Y]])
 
+    def selectAndUseHandCard(self, card_index, card_num):
+        """Cast a spell that does not need a target."""
+        self.chooseHandCard(card_index, card_num)
+        self.mouseClickPosition([coors[COORDINATE_MID_X], coors[COORDINATE_NO_OP_Y]])
+
     def replaceStartingCard(self, card_index, hand_card_num):
         start_card_x = coors[COORDINATE_START_CARD_X]
+        visible_card_num = 5 if hand_card_num > 3 else 3
 
-        self.mouseClickPosition([start_card_x[hand_card_num][card_index], coors[COORDINATE_START_CARD_Y]])
+        self.mouseClickPosition([
+            start_card_x[visible_card_num][card_index],
+            coors[COORDINATE_START_CARD_Y],
+        ])
 
     def chooseScreenCard(self, card_index, hand_card_num):
-        # TODO
-        # 抉择, 泰坦
-        self.mouseClickPosition([coors[COORDINATE_START_CARD_X], coors[COORDINATE_START_CARD_Y]])
+        if not 0 <= card_index < hand_card_num <= 4:
+            raise ValueError("Discover requires one to four visible options")
+        spacing = 4 * coors[COORDINATE_HALF_MINION_GAP_X]
+        x = coors[COORDINATE_MID_X] + (card_index - (hand_card_num - 1) / 2) * spacing
+        self.mouseClickPosition([x, coors[COORDINATE_START_CARD_Y]])
 
     def useBattlecryCard(self, card_index, card_num, gap_index, minion_num, choose_card_indx=None, target_pos=None):
         """ 使用具有战吼的卡片, 若需要选择目标, 则传入目标坐标参 """

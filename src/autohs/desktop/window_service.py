@@ -15,6 +15,13 @@ def get_HS_hwnd():
     if _darwin():
         from autohs.desktop import macos
 
+        hwnd = macos.hearthstone_window_pid()
+        if hwnd:
+            return hwnd
+        for app_name in app_names:
+            hwnd = macos.find_running_application_pid(app_name)
+            if hwnd:
+                return hwnd
         for app_name in app_names:
             app = macos.find_running_application(app_name=app_name)
             if not app:

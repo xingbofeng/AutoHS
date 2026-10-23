@@ -1,4 +1,4 @@
-"""Grab the frontmost screen. mss, pyautogui, and cv2 load when a function runs."""
+"""Capture Hearthstone and wait for its battlefield animations to settle."""
 
 import time
 
@@ -10,23 +10,33 @@ from autohs.desktop.window_service import _darwin
 from autohs.infrastructure.logging import logger
 
 
+class GameWindowUnavailable(RuntimeError):
+    """Hearthstone has no visible window to capture or click."""
+
+
 def take_snapshot():
     import cv2
     import numpy as np
-    import pyautogui
+
     from autohs.desktop.screen import screen_size
 
     width, height = screen_size()
     if _darwin():
         import mss
 
+        from autohs.config import bind_window
+        from autohs.desktop.window_service import get_HS_hwnd, get_window_pos
+
+        rect = get_window_pos(get_HS_hwnd())
+        if rect is None:
+            raise GameWindowUnavailable("Hearthstone window is unavailable")
+        left, top, right, bottom = map(int, rect)
+        bind_window(left, top, right, bottom)
+        bounds = {"left": left, "top": top, "width": right - left, "height": bottom - top}
         with mss.mss() as sct:
-            monitor = sct.monitors[1]
-            screenshot = pyautogui.screenshot(
-                region=(monitor["left"], monitor["top"], monitor["width"], monitor["height"])
-            )
-        image = np.array(screenshot)
-        return cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            image = np.array(sct.grab(bounds))
+        image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+        return cv2.resize(image, (bounds["width"], bounds["height"]))
 
     from autohs.desktop.windows import desktop_snapshot
 
@@ -41,16 +51,22 @@ def wait_battlefield_stable(autohs_config, wait_count=3, max_try=40):
     stable_count = 0
     start_time = 0
     end_time = 0
+    deadline = time.monotonic() + 10
 
     for _ in range(max_try):
+        if time.monotonic() >= deadline:
+            break
         image = take_snapshot()
         if image.shape[2] == 4:
             image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
 
-        start_x = autohs_config.click_coordinates[COORDINATE_BATTLEFILED_RANGE_X][0]
-        end_x = autohs_config.click_coordinates[COORDINATE_BATTLEFILED_RANGE_X][1]
-        start_y = autohs_config.click_coordinates[COORDINATE_BATTLEFILED_RANGE_Y][0]
-        end_y = autohs_config.click_coordinates[COORDINATE_BATTLEFILED_RANGE_Y][1]
+        coordinates = autohs_config.click_coordinates
+        if _darwin():
+            from autohs.desktop.coordinates import scale_from_1920
+
+            coordinates = scale_from_1920(0, 0, image.shape[1], image.shape[0])
+        start_x, end_x = coordinates[COORDINATE_BATTLEFILED_RANGE_X]
+        start_y, end_y = coordinates[COORDINATE_BATTLEFILED_RANGE_Y]
         current = image[start_y:end_y, start_x:end_x]
         current = cv2.resize(current, ((end_x - start_x) // 2, (end_y - start_y) // 2))
 

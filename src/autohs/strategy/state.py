@@ -1,10 +1,26 @@
-from autohs.constants import *
-from autohs.infrastructure.logging import logger
 import copy
 import random
-from autohs.behaviors.basic import MinionNoPoint, clicks
-from autohs.strategy.entities import *
+from itertools import combinations
 from typing import List
+
+from autohs.behaviors.basic import MinionNoPoint, clicks
+from autohs.behaviors.demon_hunter import (
+    active_count,
+    active_minion,
+)
+from autohs.constants import *
+from autohs.infrastructure.logging import logger
+from autohs.strategy.combat import (
+    attack_body,
+    attack_order,
+    cannon_triggers,
+    combined_trade_gain,
+    face_damage,
+    random_damage_value,
+    redirected_value,
+    retaliation_loss,
+)
+from autohs.strategy.entities import *
 
 
 class StrategyState:
@@ -28,6 +44,10 @@ class StrategyState:
         self.my_total_mana: int = int(log_state.my_entity.query_tag("RESOURCES"))
         self.my_used_mana: int = int(log_state.my_entity.query_tag("RESOURCES_USED"))
         self.my_temp_mana: int = int(log_state.my_entity.query_tag("TEMP_RESOURCES"))
+        self.my_corpses = int(log_state.my_entity.query_tag("CORPSES"))
+        self.my_num_turns_in_play = int(
+            log_state.my_entity.query_tag("TURN")
+        )
 
         for entity in log_state.entity_dict.values():
             if entity.query_tag("ZONE") == "HAND":
@@ -263,11 +283,74 @@ class StrategyState:
 
     @property
     def oppo_has_taunt(self):
+        if active_count(self, "BT_187", "CORE_BT_187"):
+            return False
         for oppo_minion in self.oppo_minions:
             if oppo_minion.taunt and not oppo_minion.stealth and not oppo_minion.untouchable:
                 return True
 
         return False
+
+    @property
+    def is_demon_hunter(self):
+        return getattr(getattr(self, "my_hero", None), "card_id", "").startswith("HERO_10")
+
+    @property
+    def face_damage_ignoring_taunt(self):
+        return face_damage(self)
+
+    @property
+    def guaranteed_face_damage(self):
+        if self.oppo_has_taunt:
+            return 0
+        return self.face_damage_ignoring_taunt
+
+    @property
+    def face_pressure_multiplier(self):
+        if not self.is_demon_hunter:
+            return 1
+        health = self.oppo_hero.health
+        baseline = 1.25 if health <= 12 else 1
+        if health >= 20 or self.oppo_has_taunt or not self.oppo_hero.can_be_pointed_by_minion:
+            return baseline
+
+        enemies = [minion for minion in self.oppo_minions
+                   if minion.cardtype == CARD_MINION and minion.health > 0
+                   and not minion.dormant and not minion.frozen and not minion.cant_attack]
+        incoming = sum(minion.attack * (2 if minion.windfury else 1) for minion in enemies)
+        if not self.oppo_hero.frozen and not self.oppo_hero.cant_attack:
+            weapon = getattr(self, "oppo_weapon", None)
+            weapon_attack = weapon.attack if weapon is not None and weapon.health > 0 else 0
+            incoming += max(self.oppo_hero.attack, weapon_attack) * (
+                2 if weapon is not None and weapon.windfury else 1
+            )
+        if incoming >= self.my_hero.health or any(
+                minion.attack > 0 and (minion.life_steal or minion.poisonous) for minion in enemies):
+            return baseline
+
+        aura_ids = {"NEW1_027", "CORE_NEW1_027", "VAN_NEW1_027", "TOY_330t5"}
+        auras = [minion for minion in self.my_minions
+                 if minion.card_id in aura_ids and active_minion(minion)]
+        next_turn_damage = 0
+        for minion in self.my_minions:
+            if minion.cardtype != CARD_MINION or minion.card_id == "MIS_710" \
+                    or minion.dormant or minion.frozen or minion.cant_attack:
+                continue
+            # Do not rely on temporary hero attack, a surviving aura, or enemy restraint.
+            aura_loss = sum(aura is not minion and (aura.card_id == "TOY_330t5" or minion.is_pirate)
+                            for aura in auras)
+            remaining_health = minion.health - aura_loss
+            if minion.can_beat_face and not minion.immune and not minion.divine_shield:
+                remaining_health -= self.oppo_hero.attack
+            if remaining_health > incoming:
+                next_turn_damage += max(0, minion.attack - aura_loss)
+
+        current_damage = self.guaranteed_face_damage
+        if current_damage + next_turn_damage >= health:
+            logger.debug(f"两回合抢血加权: 当前伤害 {current_damage}, "
+                         f"下回合保守估计 {next_turn_damage}, 打脸收益倍率 1.5")
+            return 1.5
+        return baseline
 
     @property
     def mine_has_taunt(self):
@@ -377,7 +460,7 @@ class StrategyState:
             if my_minion.cardtype != CARD_LOCATION:
                 continue
 
-            if my_minion.exhausted:
+            if my_minion.exhausted or my_minion.detail_card is None:
                 continue
 
             delta_h, *args = my_minion.detail_card.location_trigger_h_and_arg(self, my_index)
@@ -390,21 +473,84 @@ class StrategyState:
 
         return best_location_index, best_args
 
+    def get_best_combined_trade(self):
+        attackers = [index for index, body in attack_order(self)
+                     if body.can_attack_minion]
+        if self.my_hero.can_attack:
+            attackers.append(-1)
+        best_gain = 0
+        best = None
+        captains = {"NEW1_027", "CORE_NEW1_027", "VAN_NEW1_027"}
+        for target in self.touchable_oppo_minions:
+            aura_gain = 0
+            if target.card_id in captains and active_minion(target):
+                for other in self.oppo_minions:
+                    if other is target or not other.is_pirate:
+                        continue
+                    weakened = copy.copy(other)
+                    weakened.attack = max(0, weakened.attack - 1)
+                    weakened.max_health -= 1
+                    aura_gain += other.heuristic_val - weakened.heuristic_val
+            for count in range(1 if aura_gain else 2, len(attackers) + 1):
+                for group in combinations(attackers, count):
+                    orders = [group]
+                    if -1 in group:
+                        minions = tuple(index for index in group if index != -1)
+                        orders = [(-1,) + minions, minions + (-1,)]
+                        if active_count(self, "VAC_927") and any(
+                                self.my_minions[index].is_pirate for index in minions):
+                            orders.sort(key=lambda order: order[0] == -1)
+                    if target.divine_shield:
+                        orders.append(tuple(sorted(group, key=lambda i: (
+                            self.my_hero.attack if i == -1 else attack_body(self, self.my_minions[i]).attack
+                        ))))
+                    for order in orders:
+                        gain = combined_trade_gain(self, target, order)
+                        if gain is not None and gain + aura_gain > best_gain:
+                            best_gain = gain + aura_gain
+                            best = (order[0], target.zone_pos - 1)
+        if best is not None:
+            logger.debug(f"合力解场决策: {best}, 净收益: {best_gain}")
+        return best
+
     def get_best_attack_target(self):
         touchable_oppo_minions = self.touchable_oppo_minions
         has_taunt = self.oppo_has_taunt
+        face_weight = self.face_pressure_multiplier
         beat_face_win = self.my_total_attack >= self.oppo_hero.health
+        if self.is_demon_hunter:
+            beat_face_win = self.guaranteed_face_damage >= self.oppo_hero.health
+            if not beat_face_win:
+                combined_trade = self.get_best_combined_trade()
+                if combined_trade is not None:
+                    return combined_trade
+            ready = [(index, minion) for index, minion in attack_order(self)
+                     if minion.can_beat_face]
+            if not has_taunt and self.oppo_hero.can_be_pointed_by_minion and beat_face_win:
+                if ready:
+                    logger.debug("海盗瞎确定斩杀，随从先攻击，英雄后攻击")
+                    return ready[0][0], -1
+                if self.my_hero.can_attack and (self.my_hero.health > self.oppo_hero.attack
+                        or self.my_hero.immune or active_count(self, "VAC_501")):
+                    return -1, -1
 
         max_delta_h_val = -999999   # 如果设成0，会出现一个嘲讽卡住所有随从的情况
         max_my_index = -2
         max_oppo_index = -2
         min_attack = 0
+        pirates_can_buff_hero = self.is_demon_hunter and active_count(self, "VAC_927") and any(
+            minion.is_pirate and minion.can_attack_minion for minion in self.my_minions
+        )
 
         # 枚举每一个己方随从
         logger.debug("枚举随从")
-        for my_index, my_minion in enumerate(self.my_minions):
+        ordered = attack_order(self) if self.is_demon_hunter else list(enumerate(self.my_minions))
+        for my_index, my_minion in ordered:
             if not my_minion.can_attack_minion:
                 continue
+            if pirates_can_buff_hero and my_minion.card_id == "MIS_710" and active_minion(my_minion):
+                continue
+            body = attack_body(self, my_minion) if self.is_demon_hunter else my_minion
 
             # 如果没有墙,随从又能打脸,应该试一试
             if not has_taunt \
@@ -416,7 +562,11 @@ class StrategyState:
                                 f"斩杀了")
                     return my_index, -1
 
-                tmp_delta_h = self.oppo_hero.delta_h_after_damage(my_minion.attack + self.num_voidtouched_attendant_on_board)
+                tmp_delta_h = self.oppo_hero.delta_h_after_damage(
+                    body.attack + self.num_voidtouched_attendant_on_board
+                ) * face_weight
+                if self.is_demon_hunter and (body.immune or body.divine_shield or body.health > self.oppo_hero.attack):
+                    tmp_delta_h += cannon_triggers(self, my_index) * random_damage_value(self, 1)
 
                 logger.debug(f"攻击决策: [{my_index}]({my_minion.name})->"
                             f"[-1]({self.oppo_hero.name}) "
@@ -432,8 +582,12 @@ class StrategyState:
                 oppo_index = oppo_minion.zone_pos - 1
 
                 tmp_delta_h = 0
-                tmp_delta_h -= my_minion.delta_h_after_damage(oppo_minion.attack)
-                tmp_delta_h += oppo_minion.delta_h_after_damage(my_minion.attack)
+                tmp_delta_h -= (retaliation_loss(body, oppo_minion) if self.is_demon_hunter
+                                else my_minion.delta_h_after_damage(oppo_minion.attack))
+                tmp_delta_h += oppo_minion.delta_h_after_damage(body.attack)
+                if self.is_demon_hunter and (body.immune or body.divine_shield
+                        or body.health > oppo_minion.attack and not oppo_minion.poisonous):
+                    tmp_delta_h += cannon_triggers(self, my_index) * random_damage_value(self, 1)
 
                 logger.debug(f"攻击尝试：[{my_index}]({my_minion.name})->"
                             f"[{oppo_index}]({oppo_minion.name}) "
@@ -448,22 +602,44 @@ class StrategyState:
 
         # 试一试英雄攻击
         if self.my_hero.can_attack:
+            if self.is_demon_hunter and active_count(self, "VAC_927") and max_my_index >= 0:
+                logger.debug("海盗先攻击，为英雄和布袋手偶累积攻击力")
+                return max_my_index, max_oppo_index
             logger.debug("考虑英雄攻击")
+            protected = getattr(self.my_hero, "immune", False) or active_count(self, "VAC_501")
+            weapon_loss = self.my_weapon.attack if self.my_weapon is not None else 0
             if not has_taunt and self.oppo_hero.can_be_pointed_by_minion:
                 if beat_face_win:
                     logger.debug(f"攻击决策: [-1]({self.my_hero.name})->"
                                 f"[-1]({self.oppo_hero.name}) "
                                 f"斩杀了")
                     return -1, -1
+                if self.my_hero.health > getattr(self.oppo_hero, "attack", 0) \
+                        or protected:
+                    if not self.is_demon_hunter:
+                        return -1, -1
+                    # Face is a candidate, not an early exit before cheap removal.
+                    face_gain = self.oppo_hero.delta_h_after_damage(
+                        self.my_hero.attack + self.num_voidtouched_attendant_on_board
+                    ) * face_weight - weapon_loss
+                    if not protected:
+                        face_gain -= self.my_hero.delta_h_after_damage(self.oppo_hero.attack)
+                    face_gain += redirected_value(self, self.oppo_hero.attack)
+                    logger.debug(f"英雄打脸收益: {face_gain}")
+                    if face_gain > max_delta_h_val:
+                        max_delta_h_val = face_gain
+                        max_my_index = -1
+                        max_oppo_index = -1
 
             for oppo_minion in touchable_oppo_minions:
                 oppo_index = oppo_minion.zone_pos - 1
+                if self.my_hero.health <= oppo_minion.attack and not protected:
+                    continue
 
-                tmp_delta_h = 0
-                tmp_delta_h += oppo_minion.delta_h_after_damage(self.my_hero.attack)
-                tmp_delta_h -= self.my_hero.delta_h_after_damage(oppo_minion.attack)
-                if self.my_weapon is not None:
-                    tmp_delta_h -= self.my_weapon.attack
+                tmp_delta_h = oppo_minion.delta_h_after_damage(self.my_hero.attack) - weapon_loss
+                if not protected:
+                    tmp_delta_h -= self.my_hero.delta_h_after_damage(oppo_minion.attack)
+                tmp_delta_h += redirected_value(self, oppo_minion.attack)
 
                 logger.debug(f"攻击决策: [-1]({self.my_hero.name})->"
                             f"[{oppo_index}]({oppo_minion.name}) "
@@ -478,6 +654,57 @@ class StrategyState:
                     f"max_oppo_index: {max_oppo_index}")
 
         return max_my_index, max_oppo_index
+
+    def next_battle_action(self):
+        # Re-evaluate after every real action, including a hero attack reopening a location.
+        if self.is_demon_hunter and self.guaranteed_face_damage >= self.oppo_hero.health:
+            attacker, target = self.get_best_attack_target()
+            if attacker != -2:
+                return "attack", attacker, target
+
+        location_index, location_args = self.get_best_location_trigger()
+        if location_index != -1:
+            location = self.my_minions[location_index].detail_card
+            if location.location_trigger_h_and_arg(self, location_index)[0] >= 1000:
+                return "location", location_index, location_args
+
+        card_index, card_args = self.best_h_index_arg()
+        setup_ids = {"VAC_933", "TOY_518", "VAC_927", "VAC_938", "VAC_532",
+                     "NEW1_027", "CORE_NEW1_027", "VAN_NEW1_027", "TOY_330t5"}
+        if card_index == -1 and self.my_detail_hero_power.best_h_and_arg(self, -1)[0] >= 1000:
+            return "card", card_index, card_args
+        if card_index >= 0:
+            card = self.my_hand_cards[card_index]
+            if card.card_id == "VAC_928" and card_index not in (0, self.my_hand_card_num - 1):
+                for edge in (0, self.my_hand_card_num - 1):
+                    other = self.my_hand_cards[edge]
+                    if other.detail_card and other.current_cost + card.current_cost <= self.my_remaining_mana:
+                        value, *args = other.detail_card.best_h_and_arg(self, edge)
+                        if value > 0:
+                            return "card", edge, args
+            lethal = card.detail_card and card.detail_card.best_h_and_arg(self, card_index)[0] >= 1000
+            if self.is_demon_hunter and not lethal:
+                from autohs.strategy.turn import open_token_space, setup_before_card
+
+                opening = open_token_space(self)
+                if opening is not None:
+                    return opening
+                sequence = setup_before_card(self, card_index, card_args)
+                if sequence is not None:
+                    return sequence
+            setup = (self.is_demon_hunter and card.card_id in setup_ids
+                     and (self.my_minion_num <= 4 or card.card_id == "VAC_933"))
+            if lethal or setup:
+                return "card", card_index, card_args
+
+        if location_index != -1:
+            return "location", location_index, location_args
+        if card_index != -2:
+            return "card", card_index, card_args
+        attacker, target = self.get_best_attack_target()
+        if attacker != -2:
+            return "attack", attacker, target
+        return "end", -2, []
 
     def my_entity_attack_oppo(self, my_index, oppo_index):
         if my_index == -1:
@@ -507,13 +734,17 @@ class StrategyState:
         best_delta_h = 0
         best_index = -2
         best_args = []
+        first_turn = getattr(self, "my_num_turns_in_play", 2) == 1
+        best_minion = None
+        best_weapon = None
 
         # 考虑使用手牌
         for hand_card_index, hand_card in enumerate(self.my_hand_cards):
             delta_h = 0
             args = []
 
-            if hand_card.current_cost > self.my_remaining_mana:
+            if hand_card.current_cost > self.my_remaining_mana or (
+                    self.my_minion_num >= 7 and hand_card.cardtype in (CARD_MINION, CARD_LOCATION)):
                 logger.debug(f"卡牌-[{hand_card_index}]({hand_card.name}) 跳过")
                 continue
 
@@ -534,6 +765,14 @@ class StrategyState:
 
                 logger.debug(f"卡牌-[{hand_card_index}]({hand_card.name}) "
                             f"delta_h: {delta_h}, *args: {args} (手写行为)")
+
+            if hand_card.cardtype == CARD_MINION and self.my_minion_num < 7 \
+                    and delta_h >= 0 and (detail_card is not None or not hand_card.battlecry) \
+                    and (best_minion is None or delta_h > best_minion[0]):
+                best_minion = (delta_h, hand_card_index, args)
+            if hand_card.cardtype == CARD_WEAPON and delta_h >= 0 \
+                    and (best_weapon is None or delta_h > best_weapon[0]):
+                best_weapon = (delta_h, hand_card_index, args)
 
             if delta_h > best_delta_h:
                 best_delta_h = delta_h
@@ -559,6 +798,30 @@ class StrategyState:
                 best_args = args
         else:
             logger.debug(f"技能-[ ]({self.my_hero_power.name}) 跳过")
+
+        preserve_minion_mana = (self.is_demon_hunter and best_index == -1
+                                and best_minion is not None
+                                and self.my_hand_cards[best_minion[1]].current_cost
+                                + self.my_hero_power.current_cost > self.my_remaining_mana)
+        preserve_minion_mana = preserve_minion_mana or (
+            self.is_demon_hunter and best_index == -1 and best_minion is not None
+            and any(card.card_id == "VAC_928" for card in self.my_hand_cards)
+        )
+        preserve_weapon_mana = (self.is_demon_hunter and best_index == -1
+                                and best_weapon is not None
+                                and best_weapon[0] > 0
+                                and best_weapon[1] != best_index
+                                and self.my_remaining_mana >= self.my_hand_cards[best_weapon[1]].current_cost
+                                and self.my_hand_cards[best_weapon[1]].current_cost
+                                + self.my_hero_power.current_cost > self.my_remaining_mana)
+        if (first_turn or preserve_minion_mana or preserve_weapon_mana) \
+                and best_delta_h < 1000:
+            if preserve_weapon_mana:
+                best_delta_h, best_index, best_args = best_weapon
+                logger.debug("技能会占用可挂武器的费用，优先挂武器")
+            elif best_minion is not None:
+                best_delta_h, best_index, best_args = best_minion
+                logger.debug("首回合或技能占用铺场费用，优先下随从")
 
         logger.debug(f"决策结果: best_delta_h:{best_delta_h}, "
                     f"best_index:{best_index}, best_args:{best_args}")

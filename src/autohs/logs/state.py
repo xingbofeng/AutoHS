@@ -1,8 +1,13 @@
-from autohs.constants import *
-
-from autohs.catalog.lookup import query_json_get_dict, query_json_get_name, query_json_get_races, query_json_get_spell_school
-from autohs.infrastructure.logging import logger
+from autohs.catalog.lookup import (
+    query_json_get_dict,
+    query_json_get_name,
+    query_json_get_races,
+    query_json_get_spell_school,
+)
 from autohs.config import autohs_config
+from autohs.constants import *
+from autohs.infrastructure.logging import logger
+
 
 class LogState:
     def __init__(self):
@@ -14,6 +19,18 @@ class LogState:
         self.oppo_player_id = "0"
         self.entity_dict = {}
         self.current_update_id = 0
+        self.current_player_id = None
+        self.choices = {}
+        self.current_choice_id = None
+
+    @property
+    def pending_choice(self):
+        for choice in self.choices.values():
+            if (choice["ready"] and choice.get("owner") == self.my_player_id
+                    and choice["kind"] == "GENERAL" and choice["maximum"] == 1
+                    and choice["minimum"] == 1 and 1 <= len(choice["entities"]) <= 4):
+                return choice
+        return None
 
     def __str__(self):
         res = \
@@ -189,6 +206,30 @@ class CardEntity(Entity):
 
 
 def update_state(state : LogState, line_info_container):
+    kind = line_info_container.line_type
+    info = line_info_container.info_dict
+    if kind == "Choice Start":
+        state.current_choice_id = info["choice_id"]
+        state.choices[state.current_choice_id] = {
+            **info, "ready": False, "entities": [], "attempts": 0,
+        }
+        return True
+    if kind in ("Choice Source", "Choice Option"):
+        choice = state.choices.get(state.current_choice_id)
+        if choice is not None:
+            if kind == "Choice Source":
+                choice.update(info)
+            else:
+                if info["index"] == len(choice["entities"]):
+                    choice["entities"].append(info["entity"])
+        return True
+    if kind in ("Choice Ready", "Choice Done"):
+        choice_id = info["choice_id"]
+        if kind == "Choice Done":
+            state.choices.pop(choice_id, None)
+        elif choice_id in state.choices:
+            state.choices[choice_id]["ready"] = True
+        return True
     if line_info_container.line_type == LOG_LINE_CREATE_GAME:
         logger.debug("新的对局开始，刷新状态")
         state.flush()
@@ -208,6 +249,7 @@ def update_state(state : LogState, line_info_container):
 
         state.current_update_id = player_entity_id
         state.add_player_entity(player_entity_id, player_id, player_entity)
+        state.current_player_id = player_id
 
     if line_info_container.line_type == LOG_LINE_FULL_ENTITY:
         card_id = line_info_container.info_dict["card"]
@@ -221,7 +263,10 @@ def update_state(state : LogState, line_info_container):
         card_id = line_info_container.info_dict["card"]
         card_entity_id = line_info_container.info_dict["entity"]
 
-        card_entity = state.entity_dict[card_entity_id]
+        card_entity = state.entity_dict.get(card_entity_id)
+        if card_entity is None:
+            card_entity = CardEntity(card_id)
+            state.add_entity(card_entity_id, card_entity)
         card_entity.update_card_id(card_id)
         state.current_update_id = card_entity_id
 
@@ -229,12 +274,20 @@ def update_state(state : LogState, line_info_container):
         card_id = line_info_container.info_dict["card"]
         card_entity_id = line_info_container.info_dict["entity"]
 
-        card_entity = state.entity_dict[card_entity_id]
+        card_entity = state.entity_dict.get(card_entity_id)
+        if card_entity is None:
+            card_entity = CardEntity(card_id)
+            state.add_entity(card_entity_id, card_entity)
         card_entity.update_card_id(card_id)
         state.current_update_id = card_entity_id
 
     if line_info_container.line_type == LOG_LINE_TAG_CHANGE:
         entity_string = line_info_container.info_dict["entity"]
+
+        # A runner restarted mid-match may not have parsed CREATE_GAME yet.
+        # Ignore stale player tags instead of dereferencing entity 0.
+        if state.game_entity_id == 0 and entity_string != "GameEntity":
+            return True
 
         # 情形一 "TAG_CHANGE Entity=GameEntity"
         if entity_string == "GameEntity":
@@ -283,7 +336,7 @@ def update_state(state : LogState, line_info_container):
             if tag == "CARDTYPE" \
                     and value not in ["HERO", "HERO_POWER", "PLAYER", "GAME"] \
                     and "CONTROLLER" in state.current_update_entity.tag_dict:
-                state.my_player_id = state.current_update_entity.query_tag("CONTROLLER")
+                state.my_player_id = state.current_player_id or state.current_update_entity.query_tag("CONTROLLER")
                 # 双方PlayerID, 一个是1, 一个是2
                 state.oppo_player_id = str(3 - int(state.my_player_id))
                 logger.debug(f"my_player_id: {state.my_player_id}")

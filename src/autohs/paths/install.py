@@ -1,8 +1,8 @@
 import os
 import plistlib
 
-HEARTHSTONE_ROOT = "/Volumes/Jiahao-500G/games/Hearthstone"
-BATTLENET_APP = "/Volumes/Jiahao-500G/games/Battle.net.app"
+HEARTHSTONE_ROOT = "/Applications/Hearthstone"
+BATTLENET_APP = "/Applications/Battle.net.app"
 
 
 def hearthstone_app(root):

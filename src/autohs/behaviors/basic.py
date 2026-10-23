@@ -1,7 +1,8 @@
 import time
 from abc import ABC, abstractmethod
-from autohs.constants import *
+
 from autohs.config import autohs_config
+from autohs.constants import *
 from autohs.infrastructure.logging import logger
 
 
@@ -55,8 +56,7 @@ class SpellCard(Card):
 class SpellNoPoint(SpellCard):
     @classmethod
     def use_with_arg(cls, state, card_index, *args):
-        clicks().cards.useHandCard(card_index, state.my_hand_card_num)
-        clicks().game.cancelClick()
+        clicks().cards.selectAndUseHandCard(card_index, state.my_hand_card_num)
         time.sleep(cls.wait_time)
 
 
@@ -150,6 +150,10 @@ class MinionCard(Card):
         delta_h, *args = cls.utilize_delta_h_and_arg(state, hand_card_index)
         if len(args) == 0:
             args = [state.my_minion_num]
+        if getattr(state, "is_demon_hunter", False):
+            from autohs.strategy.combat import best_summon_gap
+
+            args[0] = best_summon_gap(state, state.my_hand_cards[hand_card_index])
 
         delta_h += cls.basic_delta_h(state, hand_card_index)
         delta_h += cls.combo_delta_h(state, hand_card_index)

@@ -1,6 +1,7 @@
 import re
 
 from autohs.constants import *
+from autohs.logs.choices import parse_choice_line
 from autohs.logs.events import LineInfoContainer, fetch_entity_id
 
 # "D 04:23:18.0000001 GameState.DebugPrintPower() -     GameEntity EntityID=1"
@@ -12,9 +13,10 @@ GAME_ENTITY_PATTERN = re.compile(r" *GameEntity EntityID=(\d+)")
 # "Player EntityID=2 PlayerID=1 GameAccountId=[hi=112233445566778899 lo=223344556]"
 PLAYER_PATTERN = re.compile(r" *Player EntityID=(\d+) PlayerID=(\d+).*")
 
-# "FULL_ENTITY - Creting ID=89 CardID=EX1_538t"
+# "FULL_ENTITY - Creating ID=89 CardID=EX1_538t"
 # "FULL_ENTITY - Creating ID=90 CardID="
-FULL_ENTITY_PATTERN = re.compile(r" *FULL_ENTITY - Creating ID=(\d+) CardID=(.*)")
+# "FULL_ENTITY - Updating [entityName=... id=43 ...] CardID="
+FULL_ENTITY_PATTERN = re.compile(r" *FULL_ENTITY - (?:Creating|Updating) (.*?) CardID=(.*)")
 
 # "SHOW_ENTITY - Updating Entity=90 CardID=NEW1_033o"
 # "SHOW_ENTITY - Updating Entity=[entityName=UNKNOWN ENTITY [cardType=INVALID] id=32 zone=DECK zonePos=0 cardId= player=1] CardID=VAN_EX1_539"
@@ -43,6 +45,9 @@ TAG_CHANGE_PATTERN = re.compile(r" *TAG_CHANGE Entity=(.*) tag=(.*) value=(.*) "
 TAG_PATTERN = re.compile(r" *tag=(.*) value=(.*)")
 
 def parse_line(line_str):
+    choice = parse_choice_line(line_str)
+    if choice is not None:
+        return choice
     match_obj = GAME_STATE_PATTERN.match(line_str)
     if match_obj is None:
         return
@@ -88,7 +93,7 @@ def parse_line(line_str):
     if match_obj is not None:
         return LineInfoContainer(
             LOG_LINE_FULL_ENTITY,
-            entity=match_obj.group(1),
+            entity=fetch_entity_id(match_obj.group(1).removeprefix("ID=")),
             card=match_obj.group(2)
         )
 

@@ -14,6 +14,7 @@ FSM_WAIT_MAIN_MENU = "Wait main menu"
 
 LOG_CONTAINER_ERROR = 0
 LOG_CONTAINER_INFO = 1
+LOG_CONTAINER_LOG_SESSION = 2
 
 LOG_LINE_CREATE_GAME = "Create Game"
 LOG_LINE_GAME_ENTITY = "Create Game Entity"
@@ -78,6 +79,7 @@ COORDINATE_GIVE_UP_Y = "give_up_y"
 
 SCREEN_MODE_STARTUP = "STARTUP"                           # 启动炉石
 SCREEN_MODE_LOGIN = "LOGIN"                               # 点击进入游戏
+SCREEN_MODE_GAME_MODE = "GAME_MODE"                 # 模式选择界面
 SCREEN_MODE_HUB = "HUB"                                   # 可以选择传统对战/酒馆战旗/乱斗的地方
 SCREEN_MODE_TOURNAMENT = "TOURNAMENT"                     # 选卡组
 SCREEN_MODE_COLLECTIONMANAGER = "COLLECTIONMANAGER"       # 我的收藏

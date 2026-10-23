@@ -179,15 +179,14 @@ def _scaled_axis(value, origin, rate):
 def scale_from_1920(left, top, width, height):
     """Place the 1920x1080 table on a window.
 
-    The scale is the window height divided by 1080. A 16:9 board of that
-    height is centered on the window. Spacing such as the minion gap is
-    scaled and not shifted.
+    A resized game window keeps the full 16:9 board and letterboxes it.
+    Fit both dimensions, then center the board inside the window.
     """
     if width <= 0 or height <= 0:
         raise ValueError("window size must be positive")
-    rate = height / 1080
-    origin_x = left + width / 2 - (1920 * rate) / 2
-    origin_y = top + height / 2 - height / 2
+    rate = min(width / 1920, height / 1080)
+    origin_x = left + (width - 1920 * rate) / 2
+    origin_y = top + (height - 1080 * rate) / 2
     scaled = {}
     for key, value in COORDINATES_1920_1080.items():
         if key in _DELTA_KEYS:
